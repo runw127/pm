@@ -9,6 +9,7 @@ This directory contains the Kanban Studio frontend. It is a Next.js App Router a
 - `KanbanBoard` loads the signed-in user's board from the backend and saves each change through the board API. Confirmed server responses update the displayed board; errors leave the previous board visible.
 - Users can rename columns, add, edit, and delete cards, and drag cards within or between columns using `@dnd-kit`.
 - The board shows loading, saving, and error states.
+- A responsive AI chat sidebar sends authenticated requests, applies returned board snapshots, and keeps recent messages in tab session storage. New conversation clears history; logout clears it too.
 - Column count is fixed; titles are editable.
 - Styling uses `src/app/globals.css` and Tailwind CSS classes in components.
 
@@ -22,10 +23,13 @@ This directory contains the Kanban Studio frontend. It is a Next.js App Router a
 - `src/components/KanbanCard.tsx`: sortable card, editing form, and delete button.
 - `src/components/NewCardForm.tsx`: add-card form.
 - `src/components/KanbanCardPreview.tsx`: drag overlay.
+- `src/components/AIChatSidebar.tsx`: AI conversation, send state, and session history.
 - `src/lib/kanban.ts`: types, sample test data, and card movement.
 - `src/lib/board-api.ts`: board API requests and error handling.
+- `src/lib/ai-api.ts`: AI chat request and response types.
 - `src/lib/kanban.test.ts`, `src/lib/board-api.test.ts`, and `src/components/KanbanBoard.test.tsx`: Vitest unit tests.
 - `tests/kanban.spec.ts`: Playwright browser tests.
+- `tests/ai-chat.spec.ts`: AI chat browser tests with a mocked model response.
 
 ## Commands
 

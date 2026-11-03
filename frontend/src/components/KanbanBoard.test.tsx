@@ -4,20 +4,35 @@ import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { initialData, type BoardData } from "@/lib/kanban";
 import { addCard, deleteCard, editCard, getBoard, renameColumn } from "@/lib/board-api";
+import { sendChat } from "@/lib/ai-api";
 
 vi.mock("@/lib/board-api", () => ({
   getBoard: vi.fn(), renameColumn: vi.fn(), addCard: vi.fn(),
   editCard: vi.fn(), deleteCard: vi.fn(), moveCardOnServer: vi.fn(),
 }));
+vi.mock("@/lib/ai-api", async (importOriginal) => ({ ...(await importOriginal<typeof import("@/lib/ai-api")>()), sendChat: vi.fn() }));
 
 const copyBoard = (): BoardData => JSON.parse(JSON.stringify(initialData));
 
 beforeEach(() => {
   vi.resetAllMocks();
+  sessionStorage.clear();
   vi.mocked(getBoard).mockResolvedValue(copyBoard());
 });
 
 describe("KanbanBoard", () => {
+  it("replaces the board with the authoritative AI response", async () => {
+    const next = copyBoard();
+    next.columns[0].cardIds.push("card-ai");
+    next.cards["card-ai"] = { id: "card-ai", title: "AI card", details: "" };
+    vi.mocked(sendChat).mockResolvedValue({ text: "Added a card.", board: next });
+    render(<KanbanBoard />);
+    await screen.findByRole("heading", { name: "Kanban Studio" });
+    await userEvent.type(screen.getByLabelText("Message"), "Add a card");
+    await userEvent.click(screen.getByRole("button", { name: "Send message" }));
+    expect(await screen.findByText("AI card")).toBeInTheDocument();
+    expect(screen.getByLabelText("Conversation")).toHaveTextContent("Added a card.");
+  });
   it("loads the board from the API", async () => {
     render(<KanbanBoard />);
     expect(screen.getByText("Loading board...")).toBeInTheDocument();

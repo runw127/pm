@@ -13,6 +13,8 @@ import {
 } from "@dnd-kit/core";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
+import { AIChatSidebar } from "@/components/AIChatSidebar";
+import { sendChat } from "@/lib/ai-api";
 import {
   addCard,
   deleteCard,
@@ -28,8 +30,10 @@ export const KanbanBoard = () => {
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [chatBusy, setChatBusy] = useState(false);
   const [error, setError] = useState("");
   const savingRef = useRef(false);
+  const chatBusyRef = useRef(false);
 
   const refreshBoard = useCallback(async () => {
     setLoading(true);
@@ -48,7 +52,7 @@ export const KanbanBoard = () => {
   }, [refreshBoard]);
 
   const save = async (change: () => Promise<BoardData>): Promise<boolean> => {
-    if (savingRef.current) return false;
+    if (savingRef.current || chatBusyRef.current) return false;
     savingRef.current = true;
     setSaving(true);
     setError("");
@@ -64,6 +68,20 @@ export const KanbanBoard = () => {
     }
   };
 
+  const chat = async (message: string, history: Parameters<typeof sendChat>[1]): Promise<string> => {
+    if (savingRef.current || chatBusyRef.current) throw new Error("Wait for the current change to finish.");
+    chatBusyRef.current = true;
+    setChatBusy(true);
+    try {
+      const reply = await sendChat(message, history);
+      setBoard(reply.board);
+      return reply.text;
+    } finally {
+      chatBusyRef.current = false;
+      setChatBusy(false);
+    }
+  };
+
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
@@ -71,14 +89,14 @@ export const KanbanBoard = () => {
   );
 
   const handleDragStart = (event: DragStartEvent) => {
-    if (!savingRef.current) setActiveCardId(event.active.id as string);
+    if (!savingRef.current && !chatBusyRef.current) setActiveCardId(event.active.id as string);
   };
 
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
     setActiveCardId(null);
 
-    if (!board || savingRef.current || !over || active.id === over.id) {
+    if (!board || savingRef.current || chatBusyRef.current || !over || active.id === over.id) {
       return;
     }
     const nextColumns = moveCard(board.columns, String(active.id), String(over.id));
@@ -110,7 +128,8 @@ export const KanbanBoard = () => {
       <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
       <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
 
-      <main className="relative mx-auto flex min-h-screen max-w-[1500px] flex-col gap-10 px-6 pb-16 pt-12">
+      <div className="relative mx-auto flex max-w-[1800px] flex-col gap-6 px-6 pb-16 pt-8 2xl:flex-row 2xl:items-start">
+      <main className="flex min-w-0 flex-1 flex-col gap-10">
         <div aria-live="polite" className="text-sm text-[var(--gray-text)]">
           {saving ? "Saving..." : error ? <span role="alert" className="text-red-700">{error}</span> : null}
         </div>
@@ -156,13 +175,13 @@ export const KanbanBoard = () => {
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
         >
-          <section className="grid gap-6 lg:grid-cols-5">
+          <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
             {board.columns.map((column) => (
               <KanbanColumn
                 key={`${column.id}:${column.title}`}
                 column={column}
                 cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                disabled={saving}
+                disabled={saving || chatBusy}
                 onRename={(columnId, title) => save(() => renameColumn(columnId, title))}
                 onAddCard={(columnId, title, details) => save(() => addCard(columnId, title, details))}
                 onEditCard={(cardId, title, details) => save(() => editCard(cardId, title, details))}
@@ -179,6 +198,8 @@ export const KanbanBoard = () => {
           </DragOverlay>
         </DndContext>
       </main>
+      <AIChatSidebar disabled={saving} onSend={chat} />
+      </div>
     </div>
   );
 };

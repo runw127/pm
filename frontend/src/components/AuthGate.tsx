@@ -2,6 +2,7 @@
 
 import { useEffect, useState, type FormEvent } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
+import { CHAT_SESSION_KEY } from "@/lib/ai-api";
 
 type Status = "loading" | "signed-out" | "signed-in";
 
@@ -67,6 +68,7 @@ export const AuthGate = () => {
       }
       setUsername("");
       setPassword("");
+      sessionStorage.removeItem(CHAT_SESSION_KEY);
       setStatus("signed-out");
     } catch {
       setError("Unable to log out. Please try again.");

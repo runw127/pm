@@ -114,9 +114,9 @@ Success: The endpoint returns text and an authoritative board snapshot; valid AI
 
 ## Part 10: AI chat sidebar
 
-- [ ] Add a responsive sidebar with message history, input, send/loading/error states, and clear attribution.
-- [ ] Connect the sidebar to Part 9. Refresh the board from the returned snapshot after AI changes.
-- [ ] Preserve conversation during the active browser session and provide a way to start a new conversation.
+- [x] Add a responsive sidebar with message history, input, send/loading/error states, and clear attribution.
+- [x] Connect the sidebar to Part 9. Refresh the board from the returned snapshot after AI changes.
+- [x] Preserve conversation during the active browser session and provide a way to start a new conversation.
 
 Tests: Frontend unit tests for sending, replies, failures, and board refresh; browser tests for a reply and multi-card update with a mocked model; final container smoke test and both 80% unit coverage checks.
 
