@@ -59,7 +59,7 @@ The mapping is: `users` → `boards` by `user_id`, `boards` → `columns` by `bo
 
 Proposed mutation inputs are `rename column {columnId, title}`, `add card {columnId, title, details}`, `edit card {cardId, title, details}`, `delete card {cardId}`, and `move card {cardId, toColumnId, toIndex}`. Add appends to the chosen column; `toIndex` is a zero-based insertion position, including the end. A move within the same column also covers reordering. The server derives the user's board from the session and generates new card IDs. Part 9 can apply an ordered list of these operations in one transaction.
 
-Part 6 routes are `GET /api/board`, `PATCH /api/board/columns/{column_id}`, `POST /api/board/cards`, `PATCH /api/board/cards/{card_id}`, `DELETE /api/board/cards/{card_id}`, and `POST /api/board/cards/{card_id}/move`. Every route requires the existing session cookie. Mutation responses contain the full updated board. Missing cards or columns return 404; invalid titles or positions return 422.
+Part 6 routes are `GET /api/board`, `PATCH /api/board/columns/{column_id}`, `POST /api/board/cards`, `PATCH /api/board/cards/{card_id}`, `DELETE /api/board/cards/{card_id}`, and `POST /api/board/cards/{card_id}/move`. Every route requires the existing session cookie. Mutation responses contain the full updated board. Missing cards or columns return 404; invalid titles or positions return 422. Part 9's authenticated AI route and operation format are documented in [AI_CONTRACT.md](./AI_CONTRACT.md).
 
 ## Ownership, creation, and transactions
 

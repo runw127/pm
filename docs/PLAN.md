@@ -103,10 +103,10 @@ Success: A live call returns the expected answer from the chosen model and the k
 
 ## Part 9: Structured AI board updates
 
-- [ ] Send current board JSON, user message, and conversation history from the backend to OpenRouter.
-- [ ] Request a structured answer with user-facing text and optional board operations. Verify model and route support for the required structured output format before implementation and document the contract.
-- [ ] Validate operations against manual-edit rules. Apply a valid operation set in one transaction and return the resulting board.
-- [ ] Bound conversation history and handle invalid output or failed updates clearly.
+- [x] Send current board JSON, user message, and conversation history from the backend to OpenRouter.
+- [x] Request a structured answer with user-facing text and optional board operations. Verify model and route support for the required structured output format before implementation and document the contract.
+- [x] Validate operations against manual-edit rules. Apply a valid operation set in one transaction and return the resulting board.
+- [x] Bound conversation history and handle invalid output or failed updates clearly.
 
 Tests: Unit tests for parsing, no-op replies, one and multiple operations, invalid IDs, malformed output, and rollback; API integration tests with a mocked model. Recheck backend unit coverage.
 

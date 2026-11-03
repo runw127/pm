@@ -173,52 +173,72 @@ class BoardStore:
             return self._snapshot(db, self._board_id(db, username))
 
     def rename_column(self, username: str, column_id: str, title: str) -> dict:
-        title = _title(title)
-        with self._transaction() as db:
-            board_id = self._board_id(db, username)
-            self._column(db, board_id, column_id)
-            db.execute(
-                "UPDATE columns SET title = ? WHERE board_id = ? AND id = ?",
-                (title, board_id, column_id),
-            )
-            return self._snapshot(db, board_id)
+        return self.apply_operations(username, [
+            {"type": "rename_column", "columnId": column_id, "title": title}
+        ])
 
     def add_card(self, username: str, column_id: str, title: str, details: str) -> dict:
-        title = _title(title)
+        return self.apply_operations(username, [
+            {"type": "add_card", "columnId": column_id, "title": title, "details": details}
+        ])
+
+    def edit_card(self, username: str, card_id: str, title: str, details: str) -> dict:
+        return self.apply_operations(username, [
+            {"type": "edit_card", "cardId": card_id, "title": title, "details": details}
+        ])
+
+    def delete_card(self, username: str, card_id: str) -> dict:
+        return self.apply_operations(username, [{"type": "delete_card", "cardId": card_id}])
+
+    def move_card(self, username: str, card_id: str, to_column_id: str, to_index: int) -> dict:
+        return self.apply_operations(username, [
+            {"type": "move_card", "cardId": card_id,
+             "toColumnId": to_column_id, "toIndex": to_index}
+        ])
+
+    def apply_operations(self, username: str, operations: list[dict]) -> dict:
         with self._transaction() as db:
             board_id = self._board_id(db, username)
+            for operation in operations:
+                self._apply_operation(db, board_id, operation)
+            return self._snapshot(db, board_id)
+
+    def _apply_operation(self, db: sqlite3.Connection, board_id: str, op: dict) -> None:
+        kind = op["type"]
+        if kind == "rename_column":
+            title = _title(op["title"])
+            self._column(db, board_id, op["columnId"])
+            db.execute(
+                "UPDATE columns SET title = ? WHERE board_id = ? AND id = ?",
+                (title, board_id, op["columnId"]),
+            )
+        elif kind == "add_card":
+            title = _title(op["title"])
+            column_id = op["columnId"]
             self._column(db, board_id, column_id)
             position = len(self._card_ids(db, board_id, column_id))
             db.execute(
                 """INSERT INTO cards (id, board_id, column_id, position, title, details)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (f"card-{uuid4().hex}", board_id, column_id, position, title, details),
+                (f"card-{uuid4().hex}", board_id, column_id, position, title, op["details"]),
             )
-            return self._snapshot(db, board_id)
-
-    def edit_card(self, username: str, card_id: str, title: str, details: str) -> dict:
-        title = _title(title)
-        with self._transaction() as db:
-            board_id = self._board_id(db, username)
-            self._card(db, board_id, card_id)
+        elif kind == "edit_card":
+            title = _title(op["title"])
+            self._card(db, board_id, op["cardId"])
             db.execute(
                 "UPDATE cards SET title = ?, details = ? WHERE board_id = ? AND id = ?",
-                (title, details, board_id, card_id),
+                (title, op["details"], board_id, op["cardId"]),
             )
-            return self._snapshot(db, board_id)
-
-    def delete_card(self, username: str, card_id: str) -> dict:
-        with self._transaction() as db:
-            board_id = self._board_id(db, username)
+        elif kind == "delete_card":
+            card_id = op["cardId"]
             card = self._card(db, board_id, card_id)
             column_id = card["column_id"]
             db.execute("DELETE FROM cards WHERE board_id = ? AND id = ?", (board_id, card_id))
             self._set_positions(db, board_id, self._card_ids(db, board_id, column_id))
-            return self._snapshot(db, board_id)
-
-    def move_card(self, username: str, card_id: str, to_column_id: str, to_index: int) -> dict:
-        with self._transaction() as db:
-            board_id = self._board_id(db, username)
+        elif kind == "move_card":
+            card_id = op["cardId"]
+            to_column_id = op["toColumnId"]
+            to_index = op["toIndex"]
             card = self._card(db, board_id, card_id)
             self._column(db, board_id, to_column_id)
             from_column_id = card["column_id"]
@@ -238,4 +258,5 @@ class BoardStore:
             self._set_positions(db, board_id, from_ids)
             if to_ids is not from_ids:
                 self._set_positions(db, board_id, to_ids)
-            return self._snapshot(db, board_id)
+        else:
+            raise BoardError("Unknown board operation")

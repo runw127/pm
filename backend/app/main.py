@@ -5,6 +5,7 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
+from app.ai import AIError, AIRequest, generate_reply
 from app.auth import SESSION_COOKIE, SESSION_SECONDS, SessionStore
 from app.board import BoardError, BoardStore
 from app.openrouter import OpenRouterClient, OpenRouterError
@@ -54,6 +55,10 @@ def create_app(frontend_dir: Path, data_dir: Path) -> FastAPI:
 
     @app.exception_handler(OpenRouterError)
     def openrouter_error(_: Request, exc: OpenRouterError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+    @app.exception_handler(AIError)
+    def ai_error(_: Request, exc: AIError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
     @app.get("/api/hello")
@@ -112,6 +117,10 @@ def create_app(frontend_dir: Path, data_dir: Path) -> FastAPI:
     @app.post("/api/ai/check")
     def check_openrouter(_: str = Depends(require_user)) -> dict[str, str]:
         return {"answer": app.state.openrouter.ask("What is 2+2? Reply with only the number.")}
+
+    @app.post("/api/ai/chat")
+    def ai_chat(request: AIRequest, username: str = Depends(require_user)) -> dict:
+        return generate_reply(username, request, app.state.boards, app.state.openrouter)
 
     app.mount("/", StaticFiles(directory=frontend_dir, html=True, check_dir=False))
     return app

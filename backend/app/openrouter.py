@@ -18,6 +18,23 @@ class OpenRouterClient:
         self.transport = transport
 
     def ask(self, prompt: str) -> str:
+        return self._complete({
+            "model": MODEL,
+            "messages": [{"role": "user", "content": prompt}],
+        })
+
+    def structured(self, messages: list[dict[str, str]], schema: dict) -> str:
+        return self._complete({
+            "model": MODEL,
+            "messages": messages,
+            "response_format": {
+                "type": "json_schema",
+                "json_schema": {"name": "board_reply", "strict": True, "schema": schema},
+            },
+            "provider": {"require_parameters": True},
+        })
+
+    def _complete(self, payload: dict) -> str:
         api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
         if not api_key:
             raise OpenRouterError("OPENROUTER_API_KEY is not configured", 503)
@@ -27,7 +44,7 @@ class OpenRouterClient:
                 response = client.post(
                     OPENROUTER_URL,
                     headers={"Authorization": f"Bearer {api_key}"},
-                    json={"model": MODEL, "messages": [{"role": "user", "content": prompt}]},
+                    json=payload,
                 )
                 response.raise_for_status()
         except httpx.TimeoutException as exc:
