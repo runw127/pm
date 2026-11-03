@@ -51,3 +51,7 @@ A working MVP of the frontend has been built and is already in frontend. This is
 
 All documents for planning and executing this project will be in the docs/ directory.
 Please review the docs/PLAN.md document before proceeding.
+
+## Final task report
+
+After completing a task that changes files, show every file changed by that task in a directory-style tree. Include added, modified, and deleted files, including code, tests, and documentation. For each file, give a brief description of the change. Use clickable links for files that still exist, and label deleted files clearly. If the task changes no files, say so. Report only changes from the current task, not unrelated existing changes in the working tree.

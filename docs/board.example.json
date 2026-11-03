@@ -1,0 +1,21 @@
+{
+  "columns": [
+    { "id": "col-backlog", "title": "Backlog", "cardIds": ["card-101"] },
+    { "id": "col-discovery", "title": "Discovery", "cardIds": [] },
+    { "id": "col-progress", "title": "In Progress", "cardIds": ["card-102"] },
+    { "id": "col-review", "title": "Review", "cardIds": [] },
+    { "id": "col-done", "title": "Done", "cardIds": [] }
+  ],
+  "cards": {
+    "card-101": {
+      "id": "card-101",
+      "title": "Gather customer signals",
+      "details": "Review support tags and sales notes."
+    },
+    "card-102": {
+      "id": "card-102",
+      "title": "Design card layout",
+      "details": "Add spacing for dense lists."
+    }
+  }
+}

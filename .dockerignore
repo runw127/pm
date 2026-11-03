@@ -1,0 +1,11 @@
+.git
+.env
+**/.env*
+**/.venv
+**/node_modules
+**/.next
+**/out
+**/test-results
+**/.pytest_cache
+**/.coverage
+data
