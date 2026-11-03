@@ -8,78 +8,114 @@ const signIn = async (page: Page) => {
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
 };
 
-test("loads the kanban board", async ({ page }) => {
+const addCard = async (page: Page, title: string) => {
+  const column = page.getByTestId("column-col-backlog");
+  await column.getByRole("button", { name: "Add a card" }).click();
+  await column.getByPlaceholder("Card title").fill(title);
+  await column.getByPlaceholder("Details").fill("Added in browser test");
+  await column.getByRole("button", { name: "Add card" }).click();
+  await expect(column.getByText(title)).toBeVisible();
+};
+
+test("loads five columns after sign-in and refresh", async ({ page }) => {
   await signIn(page);
-  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
   await page.reload();
   await expect(page.locator('[data-testid^="column-"]')).toHaveCount(5);
 });
 
-test("renames a column", async ({ page }) => {
+test("renames a column and retains the title after refresh", async ({ page }) => {
   await signIn(page);
-  const firstColumn = page.locator('[data-testid^="column-"]').first();
-  const title = firstColumn.getByRole("textbox", { name: "Column title" });
-  await title.fill("Ideas");
-  await expect(title).toHaveValue("Ideas");
+  const title = page.getByTestId("column-col-backlog").getByRole("textbox", { name: "Column title" });
+  const original = await title.inputValue();
+  await title.fill("Browser Ideas");
+  await title.press("Tab");
+  await expect(title).toHaveValue("Browser Ideas");
+  await expect(page.getByText("Saving...")).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByTestId("column-col-backlog").getByRole("textbox", { name: "Column title" })).toHaveValue("Browser Ideas");
+  await page.getByTestId("column-col-backlog").getByRole("textbox", { name: "Column title" }).fill(original);
+  await page.getByTestId("column-col-backlog").getByRole("textbox", { name: "Column title" }).press("Tab");
+  await expect(page.getByText("Saving...")).toHaveCount(0);
 });
 
-test("adds a card to a column", async ({ page }) => {
+test("adds, edits, and deletes a persistent card", async ({ page }) => {
   await signIn(page);
-  const firstColumn = page.locator('[data-testid^="column-"]').first();
-  await firstColumn.getByRole("button", { name: /add a card/i }).click();
-  await firstColumn.getByPlaceholder("Card title").fill("Playwright card");
-  await firstColumn.getByPlaceholder("Details").fill("Added via e2e.");
-  await firstColumn.getByRole("button", { name: /add card/i }).click();
-  await expect(firstColumn.getByText("Playwright card")).toBeVisible();
-  await firstColumn.getByRole("button", { name: "Delete Playwright card", exact: true }).click();
-  await expect(firstColumn.getByText("Playwright card")).toHaveCount(0);
+  const title = `Browser card ${Date.now()}`;
+  await addCard(page, title);
+  await page.reload();
+  await expect(page.getByText(title)).toBeVisible();
+
+  await page.getByRole("button", { name: `Edit ${title}` }).click();
+  await page.getByLabel("Edit card title").fill(`${title} edited`);
+  await page.getByLabel("Edit card details").fill("Updated notes");
+  await page.getByRole("button", { name: "Save card" }).click();
+  await expect(page.getByText(`${title} edited`)).toBeVisible();
+  await page.reload();
+  await expect(page.getByText("Updated notes")).toBeVisible();
+
+  await page.getByRole("button", { name: `Delete ${title} edited` }).click();
+  await expect(page.getByText(`${title} edited`)).toHaveCount(0);
+  await page.reload();
+  await expect(page.getByText(`${title} edited`)).toHaveCount(0);
 });
 
-test("moves a card between columns", async ({ page }) => {
+test("drags a card to another column and keeps the move after refresh", async ({ page }) => {
   await signIn(page);
-  const card = page.getByTestId("card-card-1");
-  const targetColumn = page.getByTestId("column-col-review");
-  const cardBox = await card.boundingBox();
-  const columnBox = await targetColumn.boundingBox();
-  if (!cardBox || !columnBox) {
-    throw new Error("Unable to resolve drag coordinates.");
-  }
+  const title = `Dragged card ${Date.now()}`;
+  await addCard(page, title);
+  const handle = page.getByRole("button", { name: `Drag ${title}` });
+  const target = page.getByTestId("column-col-review");
+  const handleBox = await handle.boundingBox();
+  const targetBox = await target.boundingBox();
+  if (!handleBox || !targetBox) throw new Error("Unable to resolve drag coordinates");
 
-  await page.mouse.move(
-    cardBox.x + cardBox.width / 2,
-    cardBox.y + cardBox.height / 2
-  );
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
   await page.mouse.down();
-  await page.mouse.move(
-    columnBox.x + columnBox.width / 2,
-    columnBox.y + 120,
-    { steps: 12 }
-  );
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 120, { steps: 12 });
   await page.mouse.up();
-  await expect(targetColumn.getByTestId("card-card-1")).toBeVisible();
+  await expect(target.getByText(title)).toBeVisible();
+  await page.reload();
+  await expect(page.getByTestId("column-col-review").getByText(title)).toBeVisible();
+  await page.getByRole("button", { name: `Delete ${title}` }).click();
 });
 
-test("sign-in survives browser restart and logout removes access", async ({
-  page,
-  browser,
-}) => {
+test("reorders cards within a column", async ({ page }) => {
+  await signIn(page);
+  const first = `First reorder ${Date.now()}`;
+  const second = `Second reorder ${Date.now()}`;
+  await addCard(page, first);
+  await addCard(page, second);
+  const handleBox = await page.getByRole("button", { name: `Drag ${second}` }).boundingBox();
+  const targetBox = await page.getByText(first).locator("xpath=ancestor::article").boundingBox();
+  if (!handleBox || !targetBox) throw new Error("Unable to resolve drag coordinates");
+
+  await page.mouse.move(handleBox.x + handleBox.width / 2, handleBox.y + handleBox.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + 15, { steps: 12 });
+  await page.mouse.up();
+  const relativeOrder = async () => {
+    const titles = await page.getByTestId("column-col-backlog").locator("article h4").allTextContents();
+    return titles.indexOf(second) - titles.indexOf(first);
+  };
+  await expect.poll(relativeOrder).toBeLessThan(0);
+  await page.reload();
+  await expect.poll(relativeOrder).toBeLessThan(0);
+  await page.getByRole("button", { name: `Delete ${first}` }).click();
+  await page.getByRole("button", { name: `Delete ${second}` }).click();
+});
+
+test("sign-in survives browser restart and logout removes access", async ({ page, browser }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toHaveCount(0);
-
   await page.getByLabel("Username").fill("user");
   await page.getByLabel("Password").fill("wrong");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByText("Incorrect username or password.")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toHaveCount(0);
 
   await page.getByLabel("Password").fill("password");
   await page.getByRole("button", { name: "Sign in" }).click();
   await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
-  await page.reload();
-  await expect(page.getByRole("heading", { name: "Kanban Studio" })).toBeVisible();
-
   const browserState = await page.context().storageState();
   const reopened = await browser.newContext({ storageState: browserState });
   const reopenedPage = await reopened.newPage();

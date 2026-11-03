@@ -3,21 +3,23 @@ import { useState, type FormEvent } from "react";
 const initialFormState = { title: "", details: "" };
 
 type NewCardFormProps = {
-  onAdd: (title: string, details: string) => void;
+  disabled: boolean;
+  onAdd: (title: string, details: string) => Promise<boolean>;
 };
 
-export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
+export const NewCardForm = ({ disabled, onAdd }: NewCardFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [formState, setFormState] = useState(initialFormState);
 
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!formState.title.trim()) {
       return;
     }
-    onAdd(formState.title.trim(), formState.details.trim());
-    setFormState(initialFormState);
-    setIsOpen(false);
+    if (await onAdd(formState.title.trim(), formState.details.trim())) {
+      setFormState(initialFormState);
+      setIsOpen(false);
+    }
   };
 
   return (
@@ -26,6 +28,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
         <form onSubmit={handleSubmit} className="space-y-3">
           <input
             value={formState.title}
+            disabled={disabled}
             onChange={(event) =>
               setFormState((prev) => ({ ...prev, title: event.target.value }))
             }
@@ -35,6 +38,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
           />
           <textarea
             value={formState.details}
+            disabled={disabled}
             onChange={(event) =>
               setFormState((prev) => ({ ...prev, details: event.target.value }))
             }
@@ -45,12 +49,14 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
           <div className="flex items-center gap-2">
             <button
               type="submit"
+              disabled={disabled}
               className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
             >
               Add card
             </button>
             <button
               type="button"
+              disabled={disabled}
               onClick={() => {
                 setIsOpen(false);
                 setFormState(initialFormState);
@@ -64,6 +70,7 @@ export const NewCardForm = ({ onAdd }: NewCardFormProps) => {
       ) : (
         <button
           type="button"
+          disabled={disabled}
           onClick={() => setIsOpen(true)}
           className="w-full rounded-full border border-dashed border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] transition hover:border-[var(--primary-blue)]"
         >

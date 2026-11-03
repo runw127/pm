@@ -82,10 +82,10 @@ Success: Board state persists across app restarts, users are isolated, and backe
 
 ## Part 7: Connect frontend and backend
 
-- [ ] Load the signed-in user's board through the API instead of `initialData`.
-- [ ] Send rename, add, edit, delete, move, and reorder actions to the backend; add the missing card editing UI.
-- [ ] Show saving and error states. Reconcile the displayed board with server responses so failed changes do not appear saved.
-- [ ] Retain five fixed columns and existing styling.
+- [x] Load the signed-in user's board through the API instead of `initialData`.
+- [x] Send rename, add, edit, delete, move, and reorder actions to the backend; add the missing card editing UI.
+- [x] Show saving and error states. Reconcile the displayed board with server responses so failed changes do not appear saved.
+- [x] Retain five fixed columns and existing styling.
 
 Tests: Frontend unit tests for API actions and failures; integration tests for all operations; browser tests for persistence after refresh, editing, drag and drop, and logout. Recheck both unit coverage targets.
 

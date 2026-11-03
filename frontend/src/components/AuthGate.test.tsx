@@ -1,7 +1,11 @@
-import { afterEach, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { AuthGate } from "@/components/AuthGate";
+
+vi.mock("@/components/KanbanBoard", () => ({
+  KanbanBoard: () => <h1>Kanban Studio</h1>,
+}));
 
 afterEach(() => vi.unstubAllGlobals());
 
