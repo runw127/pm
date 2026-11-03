@@ -93,9 +93,9 @@ Success: Every board change survives refresh and container restart and belongs t
 
 ## Part 8: OpenRouter connectivity
 
-- [ ] Add a backend-only OpenRouter client using `OPENROUTER_API_KEY` and `openai/gpt-oss-120b`.
-- [ ] Add a small authenticated test endpoint or script that asks `2+2` without logging secrets.
-- [ ] Handle a missing key and upstream errors clearly.
+- [x] Add a backend-only OpenRouter client using `OPENROUTER_API_KEY` and `openai/gpt-oss-120b`.
+- [x] Add a small authenticated test endpoint or script that asks `2+2` without logging secrets.
+- [x] Handle a missing key and upstream errors clearly.
 
 Tests: Unit tests with mocked OpenRouter success and failure; one opt-in live `2+2` connectivity test.
 

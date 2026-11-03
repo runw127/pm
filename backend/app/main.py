@@ -7,6 +7,7 @@ from pydantic import BaseModel, Field
 
 from app.auth import SESSION_COOKIE, SESSION_SECONDS, SessionStore
 from app.board import BoardError, BoardStore
+from app.openrouter import OpenRouterClient, OpenRouterError
 
 
 class Credentials(BaseModel):
@@ -45,9 +46,14 @@ def create_app(frontend_dir: Path, data_dir: Path) -> FastAPI:
     app = FastAPI()
     app.state.sessions = SessionStore(data_dir / "sessions")
     app.state.boards = BoardStore(data_dir / "board.sqlite3")
+    app.state.openrouter = OpenRouterClient()
 
     @app.exception_handler(BoardError)
     def board_error(_: Request, exc: BoardError) -> JSONResponse:
+        return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
+
+    @app.exception_handler(OpenRouterError)
+    def openrouter_error(_: Request, exc: OpenRouterError) -> JSONResponse:
         return JSONResponse(status_code=exc.status_code, content={"detail": str(exc)})
 
     @app.get("/api/hello")
@@ -102,6 +108,10 @@ def create_app(frontend_dir: Path, data_dir: Path) -> FastAPI:
     @app.post("/api/board/cards/{card_id}/move")
     def move_card(card_id: str, move: CardMove, username: str = Depends(require_user)) -> dict:
         return app.state.boards.move_card(username, card_id, move.to_column_id, move.to_index)
+
+    @app.post("/api/ai/check")
+    def check_openrouter(_: str = Depends(require_user)) -> dict[str, str]:
+        return {"answer": app.state.openrouter.ask("What is 2+2? Reply with only the number.")}
 
     app.mount("/", StaticFiles(directory=frontend_dir, html=True, check_dir=False))
     return app
