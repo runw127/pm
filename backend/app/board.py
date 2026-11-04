@@ -4,6 +4,9 @@ from pathlib import Path
 from uuid import uuid4
 
 
+TITLE_MAX_LENGTH = 200
+DETAILS_MAX_LENGTH = 2000
+
 DEFAULT_COLUMNS = (
     ("col-backlog", "Backlog"),
     ("col-discovery", "Discovery"),
@@ -62,7 +65,15 @@ def _title(value: str) -> str:
     title = value.strip()
     if not title:
         raise BoardError("Title cannot be empty")
+    if len(title) > TITLE_MAX_LENGTH:
+        raise BoardError(f"Title cannot exceed {TITLE_MAX_LENGTH} characters")
     return title
+
+
+def _details(value: str) -> str:
+    if len(value) > DETAILS_MAX_LENGTH:
+        raise BoardError(f"Details cannot exceed {DETAILS_MAX_LENGTH} characters")
+    return value
 
 
 class BoardStore:
@@ -220,14 +231,14 @@ class BoardStore:
             db.execute(
                 """INSERT INTO cards (id, board_id, column_id, position, title, details)
                    VALUES (?, ?, ?, ?, ?, ?)""",
-                (f"card-{uuid4().hex}", board_id, column_id, position, title, op["details"]),
+                (f"card-{uuid4().hex}", board_id, column_id, position, title, _details(op["details"])),
             )
         elif kind == "edit_card":
             title = _title(op["title"])
             self._card(db, board_id, op["cardId"])
             db.execute(
                 "UPDATE cards SET title = ?, details = ? WHERE board_id = ? AND id = ?",
-                (title, op["details"], board_id, op["cardId"]),
+                (title, _details(op["details"]), board_id, op["cardId"]),
             )
         elif kind == "delete_card":
             card_id = op["cardId"]

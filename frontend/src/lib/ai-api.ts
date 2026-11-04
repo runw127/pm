@@ -1,3 +1,4 @@
+import { errorFrom } from "@/lib/board-api";
 import type { BoardData } from "@/lib/kanban";
 
 export type ChatMessage = { role: "user" | "assistant"; content: string };
@@ -13,9 +14,6 @@ export const sendChat = async (message: string, history: ChatMessage[]): Promise
       role: item.role, content: item.content.slice(0, 1000),
     })) }),
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(typeof error?.detail === "string" ? error.detail : `Chat failed (${response.status})`);
-  }
+  if (!response.ok) throw await errorFrom(response, "Chat failed");
   return response.json();
 };

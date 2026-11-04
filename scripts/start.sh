@@ -4,6 +4,7 @@ set -euo pipefail
 project_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 mkdir -p "$project_dir/data"
 docker build -t pm-mvp:local "$project_dir"
+docker rm -f pm-mvp >/dev/null 2>&1 || true
 
 if [[ -f "$project_dir/.env" ]]; then
   docker run -d --name pm-mvp -p "${PM_PORT:-8000}:8000" -v "$project_dir/data:/app/data" --env-file "$project_dir/.env" pm-mvp:local

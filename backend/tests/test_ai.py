@@ -235,6 +235,20 @@ def test_request_rejects_blank_or_excessive_input(
     assert len(requests) == 0
 
 
+def test_chat_is_rate_limited_per_user(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    client, requests = signed_in_app(tmp_path, {"text": "No change.", "operations": []})
+    for _ in range(10):
+        assert client.post("/api/ai/chat", json={"message": "Hello"}).status_code == 200
+    limited = client.post("/api/ai/chat", json={"message": "Hello"})
+    assert limited.status_code == 429
+    assert limited.json() == {"detail": "Too many AI requests. Try again in a minute."}
+    assert len(requests) == 10
+
+    client.app.state.ai_calls["user"] = [0.0] * 10
+    assert client.post("/api/ai/chat", json={"message": "Hello"}).status_code == 200
+
+
 def test_live_structured_noop(tmp_path: Path) -> None:
     if os.getenv("OPENROUTER_LIVE_TEST") != "1":
         pytest.skip("Set OPENROUTER_LIVE_TEST=1 to run the live check")

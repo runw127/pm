@@ -1,17 +1,26 @@
 import type { BoardData } from "@/lib/kanban";
 
+export class ApiError extends Error {
+  constructor(message: string, readonly status: number) {
+    super(message);
+  }
+}
+
+export const errorFrom = async (response: Response, fallback: string) => {
+  const error = await response.json().catch(() => null);
+  return new ApiError(
+    typeof error?.detail === "string" ? error.detail : `${fallback} (${response.status})`,
+    response.status
+  );
+};
+
 const request = async (path: string, method = "GET", body?: object): Promise<BoardData> => {
   const response = await fetch(path, {
     method,
     headers: body ? { "Content-Type": "application/json" } : undefined,
     body: body ? JSON.stringify(body) : undefined,
   });
-  if (!response.ok) {
-    const error = await response.json().catch(() => null);
-    throw new Error(
-      typeof error?.detail === "string" ? error.detail : `Request failed (${response.status})`
-    );
-  }
+  if (!response.ok) throw await errorFrom(response, "Request failed");
   return response.json();
 };
 

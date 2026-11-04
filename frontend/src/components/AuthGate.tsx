@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, type FormEvent } from "react";
+import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { CHAT_SESSION_KEY } from "@/lib/ai-api";
 
@@ -57,6 +57,13 @@ export const AuthGate = () => {
     }
   };
 
+  const handleSessionExpired = useCallback(() => {
+    sessionStorage.removeItem(CHAT_SESSION_KEY);
+    setPassword("");
+    setError("Your session has expired. Please sign in again.");
+    setStatus("signed-out");
+  }, []);
+
   const handleLogout = async () => {
     setBusy(true);
     setError("");
@@ -100,7 +107,7 @@ export const AuthGate = () => {
           </button>
         </div>
         {error && <p role="alert" className="mx-auto max-w-[1500px] px-6 text-right text-sm text-red-700">{error}</p>}
-        <KanbanBoard />
+        <KanbanBoard onSessionExpired={handleSessionExpired} />
       </div>
     );
   }

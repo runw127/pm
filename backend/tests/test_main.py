@@ -36,6 +36,9 @@ def test_login_session_and_logout(tmp_path: Path) -> None:
         "/api/login", json={"username": "user", "password": "wrong"}
     ).status_code == 401
     assert client.get("/api/session").status_code == 401
+    assert client.post(
+        "/api/login", json={"username": "user", "password": "x" * 101}
+    ).status_code == 422
 
     login = client.post(
         "/api/login", json={"username": "user", "password": "password"}

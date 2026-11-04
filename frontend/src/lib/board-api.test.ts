@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { addCard, deleteCard, editCard, getBoard, moveCardOnServer, renameColumn } from "@/lib/board-api";
+import { ApiError, addCard, deleteCard, editCard, getBoard, moveCardOnServer, renameColumn } from "@/lib/board-api";
 import { initialData } from "@/lib/kanban";
 
 afterEach(() => vi.unstubAllGlobals());
@@ -37,7 +37,7 @@ describe("board API", () => {
       ok: false, status: 422, json: async () => ({ detail: "Title cannot be empty" }),
     }).mockRejectedValueOnce(new Error("Offline"));
     vi.stubGlobal("fetch", fetchMock);
-    await expect(renameColumn("col-backlog", "")).rejects.toThrow("Title cannot be empty");
+    await expect(renameColumn("col-backlog", "")).rejects.toEqual(new ApiError("Title cannot be empty", 422));
     await expect(getBoard()).rejects.toThrow("Offline");
   });
 });

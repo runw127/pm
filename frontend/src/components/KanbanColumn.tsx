@@ -2,7 +2,7 @@ import { useState } from "react";
 import clsx from "clsx";
 import { useDroppable } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy } from "@dnd-kit/sortable";
-import type { Card, Column } from "@/lib/kanban";
+import { TITLE_MAX_LENGTH, type Card, type Column } from "@/lib/kanban";
 import { KanbanCard } from "@/components/KanbanCard";
 import { NewCardForm } from "@/components/NewCardForm";
 
@@ -58,6 +58,7 @@ export const KanbanColumn = ({
               if (event.key === "Enter") event.currentTarget.blur();
             }}
             disabled={disabled}
+            maxLength={TITLE_MAX_LENGTH}
             className="mt-3 w-full bg-transparent font-display text-lg font-semibold text-[var(--navy-dark)] outline-none"
             aria-label="Column title"
           />

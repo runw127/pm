@@ -115,11 +115,26 @@ def test_rejects_invalid_inputs_without_changing_board(tmp_path: Path) -> None:
         client.post(f"/api/board/cards/{card_id}/move", json={"toColumnId": "missing", "toIndex": 0}),
         client.post(f"/api/board/cards/{card_id}/move", json={"toColumnId": "col-done", "toIndex": 2}),
         client.post(f"/api/board/cards/{card_id}/move", json={"toColumnId": "col-done", "toIndex": -1}),
+        client.patch("/api/board/columns/col-backlog", json={"title": "x" * 201}),
+        client.post("/api/board/cards", json={"columnId": "col-backlog", "title": "x" * 201}),
+        client.post(
+            "/api/board/cards", json={"columnId": "col-backlog", "title": "X", "details": "x" * 2001}
+        ),
+        client.patch(f"/api/board/cards/{card_id}", json={"title": "X", "details": "x" * 2001}),
     ]
     assert [response.status_code for response in requests] == [
-        422, 404, 404, 422, 422, 404, 404, 404, 422, 422
+        422, 404, 404, 422, 422, 404, 404, 404, 422, 422, 422, 422, 422, 422
     ]
     assert client.get("/api/board").json() == original
+
+
+def test_accepts_title_and_details_at_the_limit(tmp_path: Path) -> None:
+    client = signed_in_client(tmp_path)
+    response = client.post(
+        "/api/board/cards",
+        json={"columnId": "col-backlog", "title": "x" * 200, "details": "x" * 2000},
+    )
+    assert response.status_code == 200
 
 
 def test_second_user_cannot_change_first_users_card(tmp_path: Path) -> None:

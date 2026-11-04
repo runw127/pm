@@ -2,7 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import type { Card } from "@/lib/kanban";
+import { DETAILS_MAX_LENGTH, TITLE_MAX_LENGTH, type Card } from "@/lib/kanban";
 
 type KanbanCardProps = {
   card: Card;
@@ -83,6 +83,7 @@ export const KanbanCard = ({ card, disabled, onEdit, onDelete }: KanbanCardProps
             value={title}
             onChange={(event) => setTitle(event.target.value)}
             disabled={disabled}
+            maxLength={TITLE_MAX_LENGTH}
             required
             className="w-full rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm"
           />
@@ -91,6 +92,7 @@ export const KanbanCard = ({ card, disabled, onEdit, onDelete }: KanbanCardProps
             value={details}
             onChange={(event) => setDetails(event.target.value)}
             disabled={disabled}
+            maxLength={DETAILS_MAX_LENGTH}
             rows={3}
             className="w-full rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm"
           />

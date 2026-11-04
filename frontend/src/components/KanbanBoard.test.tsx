@@ -3,10 +3,11 @@ import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { KanbanBoard } from "@/components/KanbanBoard";
 import { initialData, type BoardData } from "@/lib/kanban";
-import { addCard, deleteCard, editCard, getBoard, renameColumn } from "@/lib/board-api";
+import { ApiError, addCard, deleteCard, editCard, getBoard, renameColumn } from "@/lib/board-api";
 import { sendChat } from "@/lib/ai-api";
 
-vi.mock("@/lib/board-api", () => ({
+vi.mock("@/lib/board-api", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/board-api")>()),
   getBoard: vi.fn(), renameColumn: vi.fn(), addCard: vi.fn(),
   editCard: vi.fn(), deleteCard: vi.fn(), moveCardOnServer: vi.fn(),
 }));
@@ -26,15 +27,36 @@ describe("KanbanBoard", () => {
     next.columns[0].cardIds.push("card-ai");
     next.cards["card-ai"] = { id: "card-ai", title: "AI card", details: "" };
     vi.mocked(sendChat).mockResolvedValue({ text: "Added a card.", board: next });
-    render(<KanbanBoard />);
+    render(<KanbanBoard onSessionExpired={vi.fn()} />);
     await screen.findByRole("heading", { name: "Kanban Studio" });
     await userEvent.type(screen.getByLabelText("Message"), "Add a card");
     await userEvent.click(screen.getByRole("button", { name: "Send message" }));
     expect(await screen.findByText("AI card")).toBeInTheDocument();
     expect(screen.getByLabelText("Conversation")).toHaveTextContent("Added a card.");
   });
+  it("reports an expired session when loading, saving, or chatting", async () => {
+    const expired = () => new ApiError("Not signed in", 401);
+    const onSessionExpired = vi.fn();
+    vi.mocked(getBoard).mockRejectedValueOnce(expired());
+    const { unmount } = render(<KanbanBoard onSessionExpired={onSessionExpired} />);
+    await waitFor(() => expect(onSessionExpired).toHaveBeenCalledOnce());
+    unmount();
+
+    vi.mocked(renameColumn).mockRejectedValue(expired());
+    vi.mocked(sendChat).mockRejectedValue(expired());
+    render(<KanbanBoard onSessionExpired={onSessionExpired} />);
+    const input = within(await screen.findByTestId("column-col-backlog")).getByLabelText("Column title");
+    await userEvent.clear(input);
+    await userEvent.type(input, "Ideas");
+    await userEvent.tab();
+    await waitFor(() => expect(onSessionExpired).toHaveBeenCalledTimes(2));
+    await userEvent.type(screen.getByLabelText("Message"), "Hello");
+    await userEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(onSessionExpired).toHaveBeenCalledTimes(3));
+  });
+
   it("loads the board from the API", async () => {
-    render(<KanbanBoard />);
+    render(<KanbanBoard onSessionExpired={vi.fn()} />);
     expect(screen.getByText("Loading board...")).toBeInTheDocument();
     expect(await screen.findByRole("heading", { name: "Kanban Studio" })).toBeInTheDocument();
     expect(screen.getAllByTestId(/column-/)).toHaveLength(5);
@@ -43,7 +65,7 @@ describe("KanbanBoard", () => {
 
   it("retries a failed board load", async () => {
     vi.mocked(getBoard).mockRejectedValueOnce(new Error("Unavailable"));
-    render(<KanbanBoard />);
+    render(<KanbanBoard onSessionExpired={vi.fn()} />);
     expect(await screen.findByRole("alert")).toHaveTextContent("Unavailable");
     await userEvent.click(screen.getByRole("button", { name: "Retry" }));
     expect(await screen.findByRole("heading", { name: "Kanban Studio" })).toBeInTheDocument();
@@ -53,7 +75,7 @@ describe("KanbanBoard", () => {
     const next = copyBoard();
     next.columns[0].title = "Ideas";
     vi.mocked(renameColumn).mockResolvedValue(next);
-    render(<KanbanBoard />);
+    render(<KanbanBoard onSessionExpired={vi.fn()} />);
     const input = within(await screen.findByTestId("column-col-backlog")).getByLabelText("Column title");
     await userEvent.clear(input);
     await userEvent.type(input, "Ideas");
@@ -65,7 +87,7 @@ describe("KanbanBoard", () => {
 
   it("keeps the confirmed title when saving fails", async () => {
     vi.mocked(renameColumn).mockRejectedValue(new Error("Save failed"));
-    render(<KanbanBoard />);
+    render(<KanbanBoard onSessionExpired={vi.fn()} />);
     const input = within(await screen.findByTestId("column-col-backlog")).getByLabelText("Column title");
     await userEvent.clear(input);
     await userEvent.type(input, "Ideas");
@@ -83,7 +105,7 @@ describe("KanbanBoard", () => {
     vi.mocked(addCard).mockResolvedValue(added);
     vi.mocked(editCard).mockResolvedValue(edited);
     vi.mocked(deleteCard).mockResolvedValue(copyBoard());
-    render(<KanbanBoard />);
+    render(<KanbanBoard onSessionExpired={vi.fn()} />);
     const column = await screen.findByTestId("column-col-backlog");
 
     await userEvent.click(within(column).getByRole("button", { name: "Add a card" }));
@@ -108,7 +130,7 @@ describe("KanbanBoard", () => {
 
   it("shows a failed add without inventing a saved card", async () => {
     vi.mocked(addCard).mockRejectedValue(new Error("Network error"));
-    render(<KanbanBoard />);
+    render(<KanbanBoard onSessionExpired={vi.fn()} />);
     const column = await screen.findByTestId("column-col-backlog");
     await userEvent.click(within(column).getByRole("button", { name: "Add a card" }));
     await userEvent.type(within(column).getByPlaceholderText("Card title"), "Unsaved");
@@ -121,7 +143,7 @@ describe("KanbanBoard", () => {
   it("shows saving until the server confirms a new card", async () => {
     let confirm!: (board: BoardData) => void;
     vi.mocked(addCard).mockReturnValue(new Promise((resolve) => { confirm = resolve; }));
-    render(<KanbanBoard />);
+    render(<KanbanBoard onSessionExpired={vi.fn()} />);
     const column = await screen.findByTestId("column-col-backlog");
     await userEvent.click(within(column).getByRole("button", { name: "Add a card" }));
     await userEvent.type(within(column).getByPlaceholderText("Card title"), "Pending card");

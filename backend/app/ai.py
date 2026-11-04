@@ -126,6 +126,7 @@ SYSTEM_PROMPT = (
     "The five columns are fixed; you may rename them but never create, delete, or reorder them. "
     "Add new cards to the end of a column. A move's toIndex is zero-based after removing "
     "the card from its old position, and may equal the destination's resulting length. "
+    "Card titles are at most 200 characters and details at most 2000. "
     "Do not invent card IDs for newly added cards. Use no operations if the user asks only "
     "a question or if the requested change is unclear."
 )

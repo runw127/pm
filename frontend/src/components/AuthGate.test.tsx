@@ -4,7 +4,12 @@ import userEvent from "@testing-library/user-event";
 import { AuthGate } from "@/components/AuthGate";
 
 vi.mock("@/components/KanbanBoard", () => ({
-  KanbanBoard: () => <h1>Kanban Studio</h1>,
+  KanbanBoard: ({ onSessionExpired }: { onSessionExpired: () => void }) => (
+    <>
+      <h1>Kanban Studio</h1>
+      <button type="button" onClick={onSessionExpired}>Expire session</button>
+    </>
+  ),
 }));
 
 afterEach(() => vi.unstubAllGlobals());
@@ -51,6 +56,17 @@ describe("AuthGate", () => {
         body: JSON.stringify({ username: "user", password: "password" }),
       })
     );
+  });
+
+  it("returns to sign-in when the session expires", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: true, status: 200 }));
+    sessionStorage.setItem("kanban-studio-chat", "[]");
+    render(<AuthGate />);
+
+    await userEvent.click(await screen.findByRole("button", { name: "Expire session" }));
+    expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Your session has expired. Please sign in again.");
+    expect(sessionStorage.getItem("kanban-studio-chat")).toBeNull();
   });
 
   it("restores a session and logs out", async () => {

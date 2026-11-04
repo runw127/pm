@@ -105,6 +105,33 @@ test("reorders cards within a column", async ({ page }) => {
   await page.getByRole("button", { name: `Delete ${second}` }).click();
 });
 
+test("reorders cards with the keyboard", async ({ page }) => {
+  await signIn(page);
+  const first = `First keyboard ${Date.now()}`;
+  const second = `Second keyboard ${Date.now()}`;
+  await addCard(page, first);
+  await addCard(page, second);
+  const relativeOrder = async () => {
+    const titles = await page.getByTestId("column-col-backlog").locator("article h4").allTextContents();
+    return titles.indexOf(second) - titles.indexOf(first);
+  };
+  await expect.poll(relativeOrder).toBeGreaterThan(0);
+
+  const firstTestId = await page.getByText(first).locator("xpath=ancestor::article").getAttribute("data-testid");
+  const handle = page.getByRole("button", { name: `Drag ${second}` });
+  await handle.focus();
+  await page.keyboard.press("Space");
+  await expect(handle).toHaveAttribute("aria-pressed", "true");
+  await page.keyboard.press("ArrowUp");
+  await expect(page.getByText(`was moved over droppable area ${firstTestId?.replace("card-", "")}.`)).toHaveCount(1);
+  await page.keyboard.press("Space");
+  await expect.poll(relativeOrder).toBeLessThan(0);
+  await page.reload();
+  await expect.poll(relativeOrder).toBeLessThan(0);
+  await page.getByRole("button", { name: `Delete ${first}` }).click();
+  await page.getByRole("button", { name: `Delete ${second}` }).click();
+});
+
 test("sign-in survives browser restart and logout removes access", async ({ page, browser }) => {
   await page.goto("/");
   await expect(page.getByRole("heading", { name: "Sign in" })).toBeVisible();

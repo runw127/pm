@@ -5,9 +5,9 @@ This directory contains the Kanban Studio frontend. It is a Next.js App Router a
 ## Current behavior
 
 - `src/lib/kanban.ts` defines board types and card movement helpers. Its sample board is used by tests.
-- `AuthGate` checks the backend session, displays the sign-in form, and provides logout. The board is shown only after sign-in.
+- `AuthGate` checks the backend session, displays the sign-in form, and provides logout. The board is shown only after sign-in. A 401 from any board or chat request returns to the sign-in form with a session-expired message.
 - `KanbanBoard` loads the signed-in user's board from the backend and saves each change through the board API. Confirmed server responses update the displayed board; errors leave the previous board visible.
-- Users can rename columns, add, edit, and delete cards, and drag cards within or between columns using `@dnd-kit`.
+- Users can rename columns, add, edit, and delete cards, and drag cards within or between columns using `@dnd-kit` with the pointer or keyboard (focus a Drag handle, Space to pick up, arrow keys to move, Space to drop). Inputs enforce the backend length limits.
 - The board shows loading, saving, and error states.
 - A responsive AI chat sidebar sends authenticated requests, applies returned board snapshots, and keeps recent messages in tab session storage. New conversation clears history; logout clears it too.
 - Column count is fixed; titles are editable.

@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
+  KeyboardSensor,
   PointerSensor,
   useSensor,
   useSensors,
@@ -11,11 +12,13 @@ import {
   type DragEndEvent,
   type DragStartEvent,
 } from "@dnd-kit/core";
+import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
 import { sendChat } from "@/lib/ai-api";
 import {
+  ApiError,
   addCard,
   deleteCard,
   editCard,
@@ -25,7 +28,13 @@ import {
 } from "@/lib/board-api";
 import { moveCard, type BoardData } from "@/lib/kanban";
 
-export const KanbanBoard = () => {
+type KanbanBoardProps = {
+  onSessionExpired: () => void;
+};
+
+const isExpired = (cause: unknown) => cause instanceof ApiError && cause.status === 401;
+
+export const KanbanBoard = ({ onSessionExpired }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -41,11 +50,12 @@ export const KanbanBoard = () => {
     try {
       setBoard(await getBoard());
     } catch (cause) {
+      if (isExpired(cause)) return onSessionExpired();
       setError(cause instanceof Error ? cause.message : "Unable to load board.");
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [onSessionExpired]);
 
   useEffect(() => {
     void refreshBoard();
@@ -60,6 +70,7 @@ export const KanbanBoard = () => {
       setBoard(await change());
       return true;
     } catch (cause) {
+      if (isExpired(cause)) onSessionExpired();
       setError(cause instanceof Error ? cause.message : "Unable to save board.");
       return false;
     } finally {
@@ -76,6 +87,9 @@ export const KanbanBoard = () => {
       const reply = await sendChat(message, history);
       setBoard(reply.board);
       return reply.text;
+    } catch (cause) {
+      if (isExpired(cause)) onSessionExpired();
+      throw cause;
     } finally {
       chatBusyRef.current = false;
       setChatBusy(false);
@@ -85,7 +99,8 @@ export const KanbanBoard = () => {
   const sensors = useSensors(
     useSensor(PointerSensor, {
       activationConstraint: { distance: 6 },
-    })
+    }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -174,6 +189,7 @@ export const KanbanBoard = () => {
           collisionDetection={closestCorners}
           onDragStart={handleDragStart}
           onDragEnd={handleDragEnd}
+          onDragCancel={() => setActiveCardId(null)}
         >
           <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
             {board.columns.map((column) => (
