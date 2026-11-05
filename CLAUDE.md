@@ -36,3 +36,7 @@ Backend (`backend/app/`):
 - `ai.py` - `/api/ai/chat`: sends board JSON plus bounded history to the model, validates the reply with strict Pydantic discriminated-union operations (`rename_column`, `add_card`, `edit_card`, `delete_card`, `move_card`), then applies them atomically via `BoardStore.apply_operations`. Contract in `docs/AI_CONTRACT.md`.
 
 Frontend (`frontend/src/`): `AuthGate` checks `/api/session` before rendering `KanbanBoard`. The board is server-authoritative: each edit calls `lib/board-api.ts` and the UI replaces state with the returned snapshot (errors keep the previous board). `AIChatSidebar` calls `lib/ai-api.ts`, applies the returned board, and keeps chat history in `sessionStorage` (history is never stored server-side). Drag and drop uses `@dnd-kit`; move logic is in `lib/kanban.ts`.
+
+
+## DETAILED PLAN
+@docs/PLAN.md
