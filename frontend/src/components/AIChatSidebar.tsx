@@ -1,16 +1,20 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { CHAT_SESSION_KEY, type ChatMessage } from "@/lib/ai-api";
+import { chatKey, type ChatMessage } from "@/lib/ai-api";
 
 type Props = {
+  boardId: string;
   disabled: boolean;
+  /** Hidden drawers stay mounted so a pending reply is not lost. */
+  open: boolean;
+  onClose: () => void;
   onSend: (message: string, history: ChatMessage[]) => Promise<string>;
 };
 
-const readHistory = (): ChatMessage[] => {
+const readHistory = (key: string): ChatMessage[] => {
   try {
-    const value: unknown = JSON.parse(sessionStorage.getItem(CHAT_SESSION_KEY) ?? "[]");
+    const value: unknown = JSON.parse(sessionStorage.getItem(key) ?? "[]");
     if (!Array.isArray(value)) return [];
     return value.filter((item): item is ChatMessage =>
       typeof item === "object" && item !== null &&
@@ -21,7 +25,8 @@ const readHistory = (): ChatMessage[] => {
   }
 };
 
-export const AIChatSidebar = ({ disabled, onSend }: Props) => {
+export const AIChatSidebar = ({ boardId, disabled, open, onClose, onSend }: Props) => {
+  const storageKey = chatKey(boardId);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [hydrated, setHydrated] = useState(false);
   const [draft, setDraft] = useState("");
@@ -29,13 +34,13 @@ export const AIChatSidebar = ({ disabled, onSend }: Props) => {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    setMessages(readHistory());
+    setMessages(readHistory(storageKey));
     setHydrated(true);
-  }, []);
+  }, [storageKey]);
 
   useEffect(() => {
-    if (hydrated) sessionStorage.setItem(CHAT_SESSION_KEY, JSON.stringify(messages));
-  }, [messages, hydrated]);
+    if (hydrated) sessionStorage.setItem(storageKey, JSON.stringify(messages));
+  }, [messages, hydrated, storageKey]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -58,20 +63,23 @@ export const AIChatSidebar = ({ disabled, onSend }: Props) => {
     setMessages([]);
     setDraft("");
     setError("");
-    sessionStorage.removeItem(CHAT_SESSION_KEY);
+    sessionStorage.removeItem(storageKey);
   };
 
   return (
-    <aside aria-label="AI chat" className="order-first flex w-full flex-col rounded-[32px] border border-[var(--stroke)] bg-white/90 p-5 shadow-[var(--shadow)] 2xl:order-last 2xl:sticky 2xl:top-5 2xl:h-[calc(100vh-2.5rem)] 2xl:w-[340px] 2xl:shrink-0">
+    <aside aria-label="AI chat" hidden={!open} className={`fixed bottom-4 right-4 top-4 z-30 w-[min(380px,calc(100vw-2rem))] flex-col rounded-[32px] border border-[var(--stroke)] bg-white p-5 shadow-[var(--shadow)] ${open ? "flex" : "hidden"}`}>
       <div className="flex items-start justify-between gap-3 border-b border-[var(--stroke)] pb-4">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--primary-blue)]">AI assistant</p>
           <h2 className="mt-2 font-display text-xl font-semibold text-[var(--navy-dark)]">Board chat</h2>
         </div>
-        <button type="button" onClick={newConversation} disabled={Boolean(pending)} className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold text-[var(--navy-dark)] disabled:opacity-50">New conversation</button>
+        <div className="flex gap-2">
+          <button type="button" onClick={newConversation} disabled={Boolean(pending)} className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold text-[var(--navy-dark)] disabled:opacity-50">New conversation</button>
+          <button type="button" onClick={onClose} aria-label="Close AI chat" className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold text-[var(--navy-dark)]">Close</button>
+        </div>
       </div>
-      <div aria-label="Conversation" aria-live="polite" className="mt-4 flex min-h-48 max-h-96 flex-1 flex-col gap-3 overflow-y-auto 2xl:max-h-none">
-        {messages.length === 0 && !pending && <p className="text-sm leading-6 text-[var(--gray-text)]">Ask about your board or request card changes.</p>}
+      <div aria-label="Conversation" aria-live="polite" className="mt-4 flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+        {messages.length === 0 && !pending && <p className="text-sm leading-6 text-[var(--gray-text)]">Ask about this board or request card and column changes.</p>}
         {messages.map((item, index) => (
           <div key={index} className={`rounded-2xl p-3 text-sm leading-6 ${item.role === "user" ? "ml-5 bg-[var(--navy-dark)] text-white" : "mr-5 bg-[var(--surface)] text-[var(--navy-dark)]"}`}>
             <p className="mb-1 text-xs font-semibold uppercase tracking-[0.15em]">{item.role === "user" ? "You" : "AI assistant"}</p>

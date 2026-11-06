@@ -1,124 +1,96 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
 import { useSortable } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import clsx from "clsx";
-import { DETAILS_MAX_LENGTH, TITLE_MAX_LENGTH, type Card } from "@/lib/kanban";
+import { CardForm } from "@/components/CardForm";
+import { CardMeta } from "@/components/CardMeta";
+import { memberName, type Card, type CardFields, type Member } from "@/lib/kanban";
 
 type KanbanCardProps = {
   card: Card;
+  members: Member[];
   disabled: boolean;
-  onEdit: (cardId: string, title: string, details: string) => Promise<boolean>;
-  onDelete: (cardId: string) => Promise<boolean>;
+  readOnly: boolean;
+  onEdit: (cardId: string, fields: CardFields) => Promise<boolean>;
+  onArchive: (cardId: string) => Promise<boolean>;
+  onOpen: (cardId: string) => void;
 };
 
-export const KanbanCard = ({ card, disabled, onEdit, onDelete }: KanbanCardProps) => {
+const actionClass = "rounded-full px-1.5 py-1 hover:text-[var(--navy-dark)]";
+
+export const KanbanCard = ({ card, members, disabled, readOnly, onEdit, onArchive, onOpen }: KanbanCardProps) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: card.id });
   const [isEditing, setIsEditing] = useState(false);
-  const [title, setTitle] = useState(card.title);
-  const [details, setDetails] = useState(card.details);
-
-  const saveEdit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!title.trim()) return;
-    if (await onEdit(card.id, title.trim(), details.trim())) setIsEditing(false);
-  };
-
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-  };
 
   return (
     <article
       ref={setNodeRef}
-      style={style}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
       className={clsx(
-        "rounded-2xl border border-transparent bg-white px-4 py-4 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
+        "rounded-2xl border border-transparent bg-white px-3 py-3 shadow-[0_12px_24px_rgba(3,33,71,0.08)]",
         "transition-all duration-150",
         isDragging && "opacity-60 shadow-[0_18px_32px_rgba(3,33,71,0.16)]"
       )}
       data-testid={`card-${card.id}`}
     >
-      <div className="mb-2 flex items-center justify-between gap-2 text-xs font-semibold text-[var(--gray-text)]">
+      {!readOnly && <div className="mb-2 flex items-center justify-between gap-1 text-xs font-semibold text-[var(--gray-text)]">
         <button
           type="button"
           {...attributes}
           {...listeners}
           disabled={disabled || isEditing}
           aria-label={`Drag ${card.title}`}
-          className="cursor-grab rounded-full px-2 py-1 hover:text-[var(--navy-dark)]"
+          className={clsx(actionClass, "cursor-grab")}
         >
           Drag
         </button>
         <div className="flex gap-1">
           <button
             type="button"
-            onClick={() => {
-              setTitle(card.title);
-              setDetails(card.details);
-              setIsEditing(true);
-            }}
+            onClick={() => setIsEditing(true)}
             disabled={disabled}
             aria-label={`Edit ${card.title}`}
-            className="rounded-full px-2 py-1 hover:text-[var(--navy-dark)]"
+            className={actionClass}
           >
             Edit
           </button>
           <button
             type="button"
-            onClick={() => void onDelete(card.id)}
+            onClick={() => void onArchive(card.id)}
             disabled={disabled}
-            aria-label={`Delete ${card.title}`}
-            className="rounded-full px-2 py-1 hover:text-[var(--navy-dark)]"
+            aria-label={`Archive ${card.title}`}
+            className={actionClass}
           >
-            Remove
+            Archive
           </button>
         </div>
-      </div>
+      </div>}
       {isEditing ? (
-        <form onSubmit={saveEdit} className="space-y-2">
-          <input
-            aria-label="Edit card title"
-            value={title}
-            onChange={(event) => setTitle(event.target.value)}
-            disabled={disabled}
-            maxLength={TITLE_MAX_LENGTH}
-            required
-            className="w-full rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm"
-          />
-          <textarea
-            aria-label="Edit card details"
-            value={details}
-            onChange={(event) => setDetails(event.target.value)}
-            disabled={disabled}
-            maxLength={DETAILS_MAX_LENGTH}
-            rows={3}
-            className="w-full rounded-xl border border-[var(--stroke)] px-3 py-2 text-sm"
-          />
-          <div className="flex gap-2 text-xs font-semibold">
-            <button type="submit" disabled={disabled} className="text-[var(--secondary-purple)]">Save card</button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                setTitle(card.title);
-                setDetails(card.details);
-                setIsEditing(false);
-              }}
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        <CardForm
+          initial={card}
+          members={members}
+          submitLabel="Save card"
+          disabled={disabled}
+          onSubmit={async (fields) => {
+            const saved = await onEdit(card.id, fields);
+            if (saved) setIsEditing(false);
+            return saved;
+          }}
+          onCancel={() => setIsEditing(false)}
+        />
       ) : (
         <div>
           <h4 className="font-display text-base font-semibold text-[var(--navy-dark)]">
-            {card.title}
+            <button type="button" onClick={() => onOpen(card.id)} aria-label={`Open ${card.title}`}
+              className="text-left hover:text-[var(--primary-blue)]">
+              {card.title}
+            </button>
           </h4>
-          <p className="mt-2 text-sm leading-6 text-[var(--gray-text)]">
-            {card.details}
-          </p>
+          {card.details && (
+            <p className="mt-2 whitespace-pre-wrap text-sm leading-6 text-[var(--gray-text)]">{card.details}</p>
+          )}
+          <CardMeta card={card} assignee={memberName(members, card.assigneeId)} />
         </div>
       )}
     </article>

@@ -1,23 +1,31 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { sendChat } from "@/lib/ai-api";
-import { initialData } from "@/lib/kanban";
+import { chatKey, clearChats, sendChat } from "@/lib/ai-api";
 
 afterEach(() => vi.unstubAllGlobals());
 
-describe("sendChat", () => {
-  it("posts the message and bounded history and returns the board", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ text: "Done", board: initialData }) });
+describe("AI API", () => {
+  it("posts to the board chat route with bounded history", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => ({ text: "Hi" }) });
     vi.stubGlobal("fetch", fetchMock);
-    const history = Array.from({ length: 12 }, (_, i) => ({ role: "user" as const, content: String(i) }));
-    expect(await sendChat("Add a card", history)).toEqual({ text: "Done", board: initialData });
-    expect(fetchMock).toHaveBeenCalledWith("/api/ai/chat", expect.objectContaining({
-      method: "POST",
-      body: JSON.stringify({ message: "Add a card", history: history.slice(-10) }),
+    const history = Array.from({ length: 12 }, (_, index) => ({
+      role: "user" as const, content: `${index}`.padEnd(1200, "x"),
     }));
+    await sendChat("board-1", "Hello", history);
+    const [path, init] = fetchMock.mock.calls[0];
+    expect(path).toBe("/api/boards/board-1/ai/chat");
+    const body = JSON.parse(init.body);
+    expect(body.message).toBe("Hello");
+    expect(body.history).toHaveLength(10);
+    expect(body.history[0].content).toHaveLength(1000);
   });
 
-  it("surfaces backend errors", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({ ok: false, json: async () => ({ detail: "Missing API key" }) }));
-    await expect(sendChat("Hello", [])).rejects.toThrow("Missing API key");
+  it("clears every board conversation", () => {
+    sessionStorage.setItem(chatKey("a"), "[]");
+    sessionStorage.setItem(chatKey("b"), "[]");
+    sessionStorage.setItem("other", "keep");
+    clearChats();
+    expect(sessionStorage.getItem(chatKey("a"))).toBeNull();
+    expect(sessionStorage.getItem(chatKey("b"))).toBeNull();
+    expect(sessionStorage.getItem("other")).toBe("keep");
   });
 });

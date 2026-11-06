@@ -1,75 +1,30 @@
-import { useState, type FormEvent } from "react";
-import { DETAILS_MAX_LENGTH, TITLE_MAX_LENGTH } from "@/lib/kanban";
-
-const initialFormState = { title: "", details: "" };
+import { useState } from "react";
+import { CardForm } from "@/components/CardForm";
+import type { CardFields, Member } from "@/lib/kanban";
 
 type NewCardFormProps = {
+  members: Member[];
   disabled: boolean;
-  onAdd: (title: string, details: string) => Promise<boolean>;
+  onAdd: (fields: CardFields) => Promise<boolean>;
 };
 
-export const NewCardForm = ({ disabled, onAdd }: NewCardFormProps) => {
+export const NewCardForm = ({ members, disabled, onAdd }: NewCardFormProps) => {
   const [isOpen, setIsOpen] = useState(false);
-  const [formState, setFormState] = useState(initialFormState);
-
-  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (!formState.title.trim()) {
-      return;
-    }
-    if (await onAdd(formState.title.trim(), formState.details.trim())) {
-      setFormState(initialFormState);
-      setIsOpen(false);
-    }
-  };
 
   return (
     <div className="mt-4">
       {isOpen ? (
-        <form onSubmit={handleSubmit} className="space-y-3">
-          <input
-            value={formState.title}
-            disabled={disabled}
-            onChange={(event) =>
-              setFormState((prev) => ({ ...prev, title: event.target.value }))
-            }
-            placeholder="Card title"
-            maxLength={TITLE_MAX_LENGTH}
-            className="w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm font-medium text-[var(--navy-dark)] outline-none transition focus:border-[var(--primary-blue)]"
-            required
-          />
-          <textarea
-            value={formState.details}
-            disabled={disabled}
-            onChange={(event) =>
-              setFormState((prev) => ({ ...prev, details: event.target.value }))
-            }
-            placeholder="Details"
-            maxLength={DETAILS_MAX_LENGTH}
-            rows={3}
-            className="w-full resize-none rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm text-[var(--gray-text)] outline-none transition focus:border-[var(--primary-blue)]"
-          />
-          <div className="flex items-center gap-2">
-            <button
-              type="submit"
-              disabled={disabled}
-              className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-white transition hover:brightness-110"
-            >
-              Add card
-            </button>
-            <button
-              type="button"
-              disabled={disabled}
-              onClick={() => {
-                setIsOpen(false);
-                setFormState(initialFormState);
-              }}
-              className="rounded-full border border-[var(--stroke)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--gray-text)] transition hover:text-[var(--navy-dark)]"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+        <CardForm
+          members={members}
+          submitLabel="Add card"
+          disabled={disabled}
+          onSubmit={async (fields) => {
+            const saved = await onAdd(fields);
+            if (saved) setIsOpen(false);
+            return saved;
+          }}
+          onCancel={() => setIsOpen(false)}
+        />
       ) : (
         <button
           type="button"

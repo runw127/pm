@@ -1,12 +1,12 @@
-# AI board chat contract (Part 9)
+# AI board chat contract
 
-`POST /api/ai/chat` requires the existing sign-in cookie. The backend derives the user from that session and reads their current board. The browser never sends a user ID, board ID, or API key.
+`POST /api/boards/{boardId}/ai/chat` requires the sign-in cookie. The backend checks that the signed-in user is the board's owner or a member (404 otherwise) and reads its current snapshot. Viewers may ask questions; the prompt tells the model they are read-only, and any operations it still returns are rejected with 403 and change nothing. The browser never sends a user ID or API key.
 
 Request:
 
 ```json
 {
-  "message": "Add a task to write tests in Backlog",
+  "message": "Add a high-priority task to write tests, due Friday",
   "history": [
     {"role": "user", "content": "What should I do next?"},
     {"role": "assistant", "content": "Writing tests would help."}
@@ -14,42 +14,45 @@ Request:
 }
 ```
 
-`message` is required, nonblank, and at most 2,000 characters. `history` is optional and contains prior `user` and `assistant` messages only. The request accepts at most 20 history entries of at most 1,000 characters each; the backend sends only the latest 10 to OpenRouter. Conversation history is supplied by the caller and is not stored in SQLite.
+`message` is required, nonblank, and at most 2,000 characters. `history` is optional and holds prior `user` and `assistant` messages only: at most 20 entries of at most 1,000 characters each. The backend sends only the latest 10 to OpenRouter. History is not stored server-side. The frontend keeps it in tab `sessionStorage`, one conversation per board.
 
 Successful response:
 
 ```json
 {
-  "text": "I added a test-writing task to Backlog.",
-  "board": {
-    "columns": [
-      {"id": "col-backlog", "title": "Backlog", "cardIds": ["card-generated-id"]}
-    ],
-    "cards": {
-      "card-generated-id": {
-        "id": "card-generated-id", "title": "Write tests", "details": ""
-      }
-    }
-  }
+  "text": "I added a high-priority test task due 2026-11-06.",
+  "board": { "id": "board-...", "name": "My board", "columns": [], "cards": {} }
 }
 ```
 
-The example abbreviates the board; real responses always contain all five columns. `board` is the authoritative snapshot after applying any operations. A reply with no changes still returns the current board.
+`board` is the authoritative snapshot after the operations are applied, in the shape described in [BOARD_MODEL.md](./BOARD_MODEL.md). A reply with no changes still returns the current board.
 
-## Model response and operations
+## Model request
 
-The backend sends the board JSON, current message, and recent history to `openai/gpt-oss-120b` through OpenRouter's Chat Completions endpoint. It requests a strict JSON-schema response and sets `provider.require_parameters` so routing only uses endpoints supporting the requested parameters. The model must return an object with a nonblank `text` string and an `operations` array. The array may be empty and may contain at most 20 ordered operations:
+The backend sends a system prompt, the recent history, and a user message containing JSON `{today, board, message}` to `openai/gpt-oss-120b` through OpenRouter's Chat Completions endpoint. `today` lets the model resolve relative dates. It requests a strict JSON-schema response and sets `provider.require_parameters` so routing only uses endpoints that support it.
 
-| Type | Required fields | Effect |
+The model returns a nonblank `text` and an ordered `operations` array of at most 20 items:
+
+| Type | Fields | Effect |
 | --- | --- | --- |
-| `rename_column` | `columnId`, `title` | Rename one of the five fixed columns. |
-| `add_card` | `columnId`, `title`, `details` | Append a new card; the server generates its ID. |
-| `edit_card` | `cardId`, `title`, `details` | Edit an existing card. |
-| `delete_card` | `cardId` | Delete an existing card. |
-| `move_card` | `cardId`, `toColumnId`, `toIndex` | Move or reorder an existing card. |
+| `add_column` | `title` | Append a column. |
+| `rename_column` | `columnId`, `title` | Rename a column. |
+| `move_column` | `columnId`, `toIndex` | Reorder a column. |
+| `add_card` | `columnId`, `title`, `details`, `priority`, `dueDate`, `labels`, `assigneeId` | Append a card; the server generates its ID. |
+| `edit_card` | `cardId`, `title`, `details`, `priority`, `dueDate`, `labels`, `assigneeId` | Replace a card's fields; the model resends unchanged values. |
+| `delete_card` | `cardId` | Delete a card permanently. |
+| `archive_card` | `cardId` | Archive a card (preferred; the user can restore it). |
+| `move_card` | `cardId`, `toColumnId`, `toIndex` | Move or reorder a card. |
+| `add_checklist_item` | `cardId`, `text` | Append an item to a card's checklist. |
+| `edit_checklist_item` | `cardId`, `itemId`, `text`, `done` | Replace an item's text and done state. |
+| `delete_checklist_item` | `cardId`, `itemId` | Remove a checklist item. |
 
-`toIndex` is zero-based after removing the card from its old position. It may equal the destination column's resulting length. The model cannot refer to a card created earlier in the same response because its ID is generated by the server. Column creation, deletion, and reordering are not supported.
+`priority` is `low`, `medium`, or `high`; `dueDate` is `YYYY-MM-DD` or null; `labels` is a string array; `assigneeId` is the ID of a board member from the snapshot's `members`, or null. `toIndex` is zero-based after removing the item from its old position and may equal the resulting length. The AI cannot delete columns, because that also deletes their cards; users do that from the board. The model cannot reference items it creates in the same reply, because their IDs are generated by the server.
 
-The backend validates the model output and applies operations sequentially in one SQLite transaction using the same board rules as manual edits. Invalid JSON, unknown operation types, invalid IDs, empty titles, or invalid positions leave the board unchanged and return an error. An OpenRouter failure also leaves the board unchanged. The endpoint returns no partial result. Card and column titles are limited to 200 characters and card details to 2,000, as for manual edits. Each user may make 10 AI requests per minute; further requests return 429.
+## Validation and failure
 
-OpenRouter documents [JSON-schema structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs) and lists `openai/gpt-oss-120b` as supporting them on its [model page](https://openrouter.ai/openai/gpt-oss-120b). Provider support can vary, so the request requires compatible parameters. A live no-change test against this model passed during Part 9.
+Applied operations are written to the board's activity log with `source: "ai"`, attributed to the user who sent the message.
+
+Pydantic validates the reply strictly. Operations then run in order in one SQLite transaction, under the same rules as manual edits. Invalid JSON, unknown operation types, invalid IDs, empty titles, bad dates, or bad positions return 502 and leave the board unchanged. An OpenRouter failure also leaves the board unchanged. A missing `OPENROUTER_API_KEY` returns 503. Each user may make 10 AI requests per minute; further requests return 429.
+
+OpenRouter documents [JSON-schema structured outputs](https://openrouter.ai/docs/guides/features/structured-outputs), and lists `openai/gpt-oss-120b` as supporting them on its [model page](https://openrouter.ai/openai/gpt-oss-120b). The opt-in live test (`OPENROUTER_LIVE_TEST=1`) checks a no-change reply against the real model.

@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -16,31 +16,63 @@ import { sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { KanbanColumn } from "@/components/KanbanColumn";
 import { KanbanCardPreview } from "@/components/KanbanCardPreview";
 import { AIChatSidebar } from "@/components/AIChatSidebar";
-import { sendChat } from "@/lib/ai-api";
+import { BoardToolbar } from "@/components/BoardToolbar";
+import { MembersPanel } from "@/components/MembersPanel";
+import { ActivityPanel } from "@/components/ActivityPanel";
+import { ArchivePanel } from "@/components/ArchivePanel";
+import { CardDetail } from "@/components/CardDetail";
+import { sendChat, type ChatMessage } from "@/lib/ai-api";
+import { isExpired, messageOf } from "@/lib/api";
 import {
-  ApiError,
   addCard,
-  deleteCard,
+  addColumn,
+  archiveCard,
+  deleteColumn,
   editCard,
   getBoard,
+  leaveBoard,
   moveCardOnServer,
+  moveColumn,
+  renameBoard,
+  removeMember,
   renameColumn,
+  shareBoard,
 } from "@/lib/board-api";
-import { moveCard, type BoardData } from "@/lib/kanban";
+import {
+  TITLE_MAX_LENGTH,
+  canEdit,
+  emptyFilter,
+  memberName,
+  matchesFilter,
+  moveCard,
+  type BoardData,
+  type BoardSummary,
+} from "@/lib/kanban";
 
 type KanbanBoardProps = {
+  boardId: string;
+  /** Card whose detail dialog opens once the board loads (from My work). */
+  initialCardId?: string;
+  currentUserId: string;
   onSessionExpired: () => void;
+  onBoardChanged: (board: BoardData) => void;
+  onLeft: (boards: BoardSummary[]) => void;
 };
 
-const isExpired = (cause: unknown) => cause instanceof ApiError && cause.status === 401;
-
-export const KanbanBoard = ({ onSessionExpired }: KanbanBoardProps) => {
+export const KanbanBoard = ({ boardId, initialCardId, currentUserId, onSessionExpired, onBoardChanged, onLeft }: KanbanBoardProps) => {
   const [board, setBoard] = useState<BoardData | null>(null);
   const [activeCardId, setActiveCardId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [chatBusy, setChatBusy] = useState(false);
   const [error, setError] = useState("");
+  const [filter, setFilter] = useState(emptyFilter);
+  const [newColumn, setNewColumn] = useState("");
+  const [membersOpen, setMembersOpen] = useState(false);
+  const [activityOpen, setActivityOpen] = useState(false);
+  const [archiveOpen, setArchiveOpen] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [openCardId, setOpenCardId] = useState<string | null>(initialCardId ?? null);
   const savingRef = useRef(false);
   const chatBusyRef = useRef(false);
 
@@ -48,18 +80,23 @@ export const KanbanBoard = ({ onSessionExpired }: KanbanBoardProps) => {
     setLoading(true);
     setError("");
     try {
-      setBoard(await getBoard());
+      setBoard(await getBoard(boardId));
     } catch (cause) {
       if (isExpired(cause)) return onSessionExpired();
-      setError(cause instanceof Error ? cause.message : "Unable to load board.");
+      setError(messageOf(cause, "Unable to load board."));
     } finally {
       setLoading(false);
     }
-  }, [onSessionExpired]);
+  }, [boardId, onSessionExpired]);
 
   useEffect(() => {
     void refreshBoard();
   }, [refreshBoard]);
+
+  const apply = (next: BoardData) => {
+    setBoard(next);
+    onBoardChanged(next);
+  };
 
   const save = async (change: () => Promise<BoardData>): Promise<boolean> => {
     if (savingRef.current || chatBusyRef.current) return false;
@@ -67,11 +104,11 @@ export const KanbanBoard = ({ onSessionExpired }: KanbanBoardProps) => {
     setSaving(true);
     setError("");
     try {
-      setBoard(await change());
+      apply(await change());
       return true;
     } catch (cause) {
       if (isExpired(cause)) onSessionExpired();
-      setError(cause instanceof Error ? cause.message : "Unable to save board.");
+      setError(messageOf(cause, "Unable to save board."));
       return false;
     } finally {
       savingRef.current = false;
@@ -79,13 +116,13 @@ export const KanbanBoard = ({ onSessionExpired }: KanbanBoardProps) => {
     }
   };
 
-  const chat = async (message: string, history: Parameters<typeof sendChat>[1]): Promise<string> => {
+  const chat = async (message: string, history: ChatMessage[]): Promise<string> => {
     if (savingRef.current || chatBusyRef.current) throw new Error("Wait for the current change to finish.");
     chatBusyRef.current = true;
     setChatBusy(true);
     try {
-      const reply = await sendChat(message, history);
-      setBoard(reply.board);
+      const reply = await sendChat(boardId, message, history);
+      apply(reply.board);
       return reply.text;
     } catch (cause) {
       if (isExpired(cause)) onSessionExpired();
@@ -97,31 +134,45 @@ export const KanbanBoard = ({ onSessionExpired }: KanbanBoardProps) => {
   };
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
-      activationConstraint: { distance: 6 },
-    }),
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
   const handleDragStart = (event: DragStartEvent) => {
-    if (!savingRef.current && !chatBusyRef.current) setActiveCardId(event.active.id as string);
+    if (!savingRef.current && !chatBusyRef.current) setActiveCardId(String(event.active.id));
   };
 
-  const handleDragEnd = (event: DragEndEvent) => {
-    const { active, over } = event;
+  const handleDragEnd = ({ active, over }: DragEndEvent) => {
     setActiveCardId(null);
-
-    if (!board || savingRef.current || chatBusyRef.current || !over || active.id === over.id) {
-      return;
-    }
-    const nextColumns = moveCard(board.columns, String(active.id), String(over.id));
+    if (!board || savingRef.current || chatBusyRef.current || !over || active.id === over.id) return;
+    const cardId = String(active.id);
+    const nextColumns = moveCard(board.columns, cardId, String(over.id));
     if (JSON.stringify(nextColumns) === JSON.stringify(board.columns)) return;
-    const target = nextColumns.find((column) => column.cardIds.includes(String(active.id)));
+    const target = nextColumns.find((column) => column.cardIds.includes(cardId));
     if (target) {
-      void save(() =>
-        moveCardOnServer(String(active.id), target.id, target.cardIds.indexOf(String(active.id)))
-      );
+      void save(() => moveCardOnServer(boardId, cardId, target.id, target.cardIds.indexOf(cardId)));
     }
+  };
+
+  const setCommentCount = (cardId: string, count: number) =>
+    setBoard((current) =>
+      current && { ...current, cards: { ...current.cards, [cardId]: { ...current.cards[cardId], commentCount: count } } }
+    );
+
+  const leave = async () => {
+    if (!window.confirm("Leave this board? You will lose access until the owner shares it again.")) return;
+    setError("");
+    try {
+      onLeft(await leaveBoard(boardId));
+    } catch (cause) {
+      if (isExpired(cause)) return onSessionExpired();
+      setError(messageOf(cause, "Unable to leave board."));
+    }
+  };
+
+  const submitColumn = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (newColumn.trim() && (await save(() => addColumn(boardId, newColumn.trim())))) setNewColumn("");
   };
 
   if (loading) {
@@ -136,53 +187,46 @@ export const KanbanBoard = ({ onSessionExpired }: KanbanBoardProps) => {
     );
   }
 
+  const busy = saving || chatBusy;
+  const readOnly = !canEdit(board.role);
   const activeCard = activeCardId ? board.cards[activeCardId] : null;
 
   return (
-    <div className="relative overflow-hidden">
-      <div className="pointer-events-none absolute left-0 top-0 h-[420px] w-[420px] -translate-x-1/3 -translate-y-1/3 rounded-full bg-[radial-gradient(circle,_rgba(32,157,215,0.25)_0%,_rgba(32,157,215,0.05)_55%,_transparent_70%)]" />
-      <div className="pointer-events-none absolute bottom-0 right-0 h-[520px] w-[520px] translate-x-1/4 translate-y-1/4 rounded-full bg-[radial-gradient(circle,_rgba(117,57,145,0.18)_0%,_rgba(117,57,145,0.05)_55%,_transparent_75%)]" />
-
-      <div className="relative mx-auto flex max-w-[1800px] flex-col gap-6 px-6 pb-16 pt-8 2xl:flex-row 2xl:items-start">
-      <main className="flex min-w-0 flex-1 flex-col gap-10">
-        <div aria-live="polite" className="text-sm text-[var(--gray-text)]">
+    <>
+      <main className="flex min-w-0 flex-col gap-5">
+        <div aria-live="polite" className="min-h-5 text-sm text-[var(--gray-text)]">
           {saving ? "Saving..." : error ? <span role="alert" className="text-red-700">{error}</span> : null}
         </div>
-        <header className="flex flex-col gap-6 rounded-[32px] border border-[var(--stroke)] bg-white/80 p-8 shadow-[var(--shadow)] backdrop-blur">
-          <div className="flex flex-wrap items-start justify-between gap-6">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.35em] text-[var(--gray-text)]">
-                Single Board Kanban
-              </p>
-              <h1 className="mt-3 font-display text-4xl font-semibold text-[var(--navy-dark)]">
-                Kanban Studio
-              </h1>
-              <p className="mt-3 max-w-xl text-sm leading-6 text-[var(--gray-text)]">
-                Keep momentum visible. Rename columns, drag cards between stages,
-                and capture quick notes without getting buried in settings.
-              </p>
-            </div>
-            <div className="rounded-2xl border border-[var(--stroke)] bg-[var(--surface)] px-5 py-4">
-              <p className="text-xs font-semibold uppercase tracking-[0.25em] text-[var(--gray-text)]">
-                Focus
-              </p>
-              <p className="mt-2 text-lg font-semibold text-[var(--primary-blue)]">
-                One board. Five columns. Zero clutter.
-              </p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center gap-4">
-            {board.columns.map((column) => (
-              <div
-                key={column.id}
-                className="flex items-center gap-2 rounded-full border border-[var(--stroke)] px-4 py-2 text-xs font-semibold uppercase tracking-[0.2em] text-[var(--navy-dark)]"
-              >
-                <span className="h-2 w-2 rounded-full bg-[var(--accent-yellow)]" />
-                {column.title}
-              </div>
-            ))}
-          </div>
-        </header>
+        <BoardToolbar
+          key={`${board.id}:${board.name}`}
+          board={board}
+          filter={filter}
+          disabled={busy}
+          membersOpen={membersOpen}
+          activityOpen={activityOpen}
+          archiveOpen={archiveOpen}
+          chatOpen={chatOpen}
+          onFilterChange={setFilter}
+          onRename={(name) => save(() => renameBoard(boardId, name))}
+          onToggleMembers={() => setMembersOpen((open) => !open)}
+          onToggleActivity={() => setActivityOpen((open) => !open)}
+          onToggleArchive={() => setArchiveOpen((open) => !open)}
+          onToggleChat={() => setChatOpen((open) => !open)}
+        />
+        {activityOpen && <ActivityPanel boardId={boardId} version={board} onSessionExpired={onSessionExpired} />}
+        {archiveOpen && (
+          <ArchivePanel boardId={boardId} version={board} readOnly={readOnly} disabled={busy}
+            onSave={save} onSessionExpired={onSessionExpired} />
+        )}
+        {membersOpen && (
+          <MembersPanel
+            board={board}
+            disabled={busy}
+            onShare={(username, role) => save(() => shareBoard(boardId, username, role))}
+            onRemove={(memberId) => save(() => removeMember(boardId, memberId))}
+            onLeave={() => void leave()}
+          />
+        )}
 
         <DndContext
           sensors={sensors}
@@ -191,31 +235,72 @@ export const KanbanBoard = ({ onSessionExpired }: KanbanBoardProps) => {
           onDragEnd={handleDragEnd}
           onDragCancel={() => setActiveCardId(null)}
         >
-          <section className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5">
-            {board.columns.map((column) => (
+          <section className="flex gap-3 overflow-x-auto pb-4" aria-label="Board columns">
+            {board.columns.map((column, index) => (
               <KanbanColumn
                 key={`${column.id}:${column.title}`}
                 column={column}
-                cards={column.cardIds.map((cardId) => board.cards[cardId])}
-                disabled={saving || chatBusy}
-                onRename={(columnId, title) => save(() => renameColumn(columnId, title))}
-                onAddCard={(columnId, title, details) => save(() => addCard(columnId, title, details))}
-                onEditCard={(cardId, title, details) => save(() => editCard(cardId, title, details))}
-                onDeleteCard={(cardId) => save(() => deleteCard(cardId))}
+                cards={column.cardIds.map((id) => board.cards[id]).filter((card) => matchesFilter(card, filter))}
+                members={board.members}
+                totalCards={column.cardIds.length}
+                index={index}
+                columnCount={board.columns.length}
+                disabled={busy}
+                readOnly={readOnly}
+                onRename={(columnId, title) => save(() => renameColumn(boardId, columnId, title))}
+                onMove={(columnId, toIndex) => save(() => moveColumn(boardId, columnId, toIndex))}
+                onDelete={(columnId) => save(() => deleteColumn(boardId, columnId))}
+                onAddCard={(columnId, fields) => save(() => addCard(boardId, columnId, fields))}
+                onEditCard={(cardId, fields) => save(() => editCard(boardId, cardId, fields))}
+                onArchiveCard={(cardId) => save(() => archiveCard(boardId, cardId))}
+                onOpenCard={setOpenCardId}
               />
             ))}
+            {!readOnly && <form
+              onSubmit={submitColumn}
+              className="flex h-fit w-[160px] shrink-0 flex-col gap-2 rounded-3xl border border-dashed border-[var(--stroke)] p-4"
+            >
+              <input
+                aria-label="New column title"
+                placeholder="New column"
+                value={newColumn}
+                onChange={(event) => setNewColumn(event.target.value)}
+                maxLength={TITLE_MAX_LENGTH}
+                disabled={busy}
+                className="w-full rounded-xl border border-[var(--stroke)] bg-white px-3 py-2 text-sm outline-none focus:border-[var(--primary-blue)]"
+              />
+              <button
+                type="submit"
+                disabled={busy || !newColumn.trim()}
+                className="rounded-full border border-[var(--primary-blue)] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-[var(--primary-blue)] disabled:opacity-50"
+              >
+                Add column
+              </button>
+            </form>}
           </section>
           <DragOverlay>
             {activeCard ? (
               <div className="w-[260px]">
-                <KanbanCardPreview card={activeCard} />
+                <KanbanCardPreview card={activeCard} assignee={memberName(board.members, activeCard.assigneeId)} />
               </div>
             ) : null}
           </DragOverlay>
         </DndContext>
       </main>
-      <AIChatSidebar disabled={saving} onSend={chat} />
-      </div>
-    </div>
+      {openCardId && board.cards[openCardId] && (
+        <CardDetail
+          board={board}
+          cardId={openCardId}
+          currentUserId={currentUserId}
+          saveError={error}
+          onClose={() => setOpenCardId(null)}
+          onCommentCount={setCommentCount}
+          onSave={save}
+          onSessionExpired={onSessionExpired}
+        />
+      )}
+      <AIChatSidebar key={boardId} boardId={boardId} disabled={saving} open={chatOpen}
+        onClose={() => setChatOpen(false)} onSend={chat} />
+    </>
   );
 };
