@@ -1,13 +1,20 @@
 "use client";
 
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { KanbanBoard } from "@/components/KanbanBoard";
-import { CHAT_SESSION_KEY } from "@/lib/ai-api";
+import { Workspace } from "@/components/Workspace";
+import { clearChats } from "@/lib/ai-api";
+import { ApiError, messageOf } from "@/lib/api";
+import { getSession, login, logout, register, type SessionUser } from "@/lib/account-api";
 
-type Status = "loading" | "signed-out" | "signed-in";
+type Mode = "sign-in" | "register";
+
+const inputClass =
+  "mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-3 font-normal outline-none focus:border-[var(--primary-blue)]";
 
 export const AuthGate = () => {
-  const [status, setStatus] = useState<Status>("loading");
+  const [loading, setLoading] = useState(true);
+  const [user, setUser] = useState<SessionUser | null>(null);
+  const [mode, setMode] = useState<Mode>("sign-in");
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
@@ -15,76 +22,62 @@ export const AuthGate = () => {
 
   useEffect(() => {
     let active = true;
-    fetch("/api/session")
-      .then((response) => {
-        if (active) setStatus(response.ok ? "signed-in" : "signed-out");
+    getSession()
+      .then((session) => active && setUser(session))
+      .catch((cause) => {
+        if (active && !(cause instanceof ApiError)) setError("Unable to check your session.");
       })
-      .catch(() => {
-        if (active) {
-          setError("Unable to check your session.");
-          setStatus("signed-out");
-        }
-      });
+      .finally(() => active && setLoading(false));
     return () => {
       active = false;
     };
   }, []);
 
-  const handleLogin = async (event: FormEvent<HTMLFormElement>) => {
+  const signOut = useCallback((message = "") => {
+    clearChats();
+    setMode("sign-in");
+    setPassword("");
+    setError(message);
+    setUser(null);
+  }, []);
+
+  const handleSessionExpired = useCallback(
+    () => signOut("Your session has expired. Please sign in again."),
+    [signOut]
+  );
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username, password }),
-      });
-      if (!response.ok) {
-        setError(
-          response.status === 401
-            ? "Incorrect username or password."
-            : "Unable to sign in. Please try again."
-        );
-        return;
-      }
+      setUser(await (mode === "sign-in" ? login : register)(username, password));
       setPassword("");
-      setStatus("signed-in");
-    } catch {
-      setError("Unable to sign in. Please try again.");
+    } catch (cause) {
+      if (mode === "sign-in" && cause instanceof ApiError && cause.status === 401) {
+        setError("Incorrect username or password.");
+      } else if (cause instanceof ApiError && cause.status < 500) {
+        setError(cause.message);
+      } else {
+        setError(`Unable to ${mode === "sign-in" ? "sign in" : "create your account"}. Please try again.`);
+      }
     } finally {
       setBusy(false);
     }
   };
-
-  const handleSessionExpired = useCallback(() => {
-    sessionStorage.removeItem(CHAT_SESSION_KEY);
-    setPassword("");
-    setError("Your session has expired. Please sign in again.");
-    setStatus("signed-out");
-  }, []);
 
   const handleLogout = async () => {
-    setBusy(true);
     setError("");
     try {
-      const response = await fetch("/api/logout", { method: "POST" });
-      if (!response.ok) {
-        setError("Unable to log out. Please try again.");
-        return;
-      }
+      await logout();
       setUsername("");
-      setPassword("");
-      sessionStorage.removeItem(CHAT_SESSION_KEY);
-      setStatus("signed-out");
-    } catch {
-      setError("Unable to log out. Please try again.");
-    } finally {
-      setBusy(false);
+      signOut();
+    } catch (cause) {
+      setError(messageOf(cause, "Unable to log out. Please try again."));
     }
   };
 
-  if (status === "loading") {
+  if (loading) {
     return (
       <main className="flex min-h-screen items-center justify-center text-sm text-[var(--gray-text)]">
         Checking your session...
@@ -92,38 +85,33 @@ export const AuthGate = () => {
     );
   }
 
-  if (status === "signed-in") {
+  if (user) {
     return (
-      <div>
-        <div className="mx-auto flex max-w-[1500px] items-center justify-end gap-4 px-6 pt-5 text-sm text-[var(--navy-dark)]">
-          <span>Signed in as user</span>
-          <button
-            type="button"
-            onClick={handleLogout}
-            disabled={busy}
-            className="rounded-full bg-[var(--secondary-purple)] px-4 py-2 font-semibold text-white disabled:opacity-60"
-          >
-            Log out
-          </button>
-        </div>
-        {error && <p role="alert" className="mx-auto max-w-[1500px] px-6 text-right text-sm text-red-700">{error}</p>}
-        <KanbanBoard onSessionExpired={handleSessionExpired} />
-      </div>
+      <>
+        {error && <p role="alert" className="mx-auto max-w-[1800px] px-6 pt-3 text-right text-sm text-red-700">{error}</p>}
+        <Workspace
+          user={user}
+          onLogout={handleLogout}
+          onSessionExpired={handleSessionExpired}
+          onAccountDeleted={() => signOut("Your account has been deleted.")}
+        />
+      </>
     );
   }
 
+  const signingIn = mode === "sign-in";
   return (
     <main className="flex min-h-screen items-center justify-center px-6 py-12">
       <form
-        onSubmit={handleLogin}
+        onSubmit={submit}
         className="w-full max-w-md rounded-[32px] border border-[var(--stroke)] bg-white p-8 shadow-[var(--shadow)]"
       >
         <div className="mb-6 h-2 w-16 rounded-full bg-[var(--accent-yellow)]" />
         <h1 className="font-display text-3xl font-semibold text-[var(--navy-dark)]">
-          Sign in
+          {signingIn ? "Sign in" : "Create account"}
         </h1>
         <p className="mt-2 text-sm text-[var(--gray-text)]">
-          Access your Kanban board.
+          {signingIn ? "Access your project boards." : "Start organizing your projects."}
         </p>
         <label className="mt-8 block text-sm font-semibold text-[var(--navy-dark)]">
           Username
@@ -132,7 +120,7 @@ export const AuthGate = () => {
             onChange={(event) => setUsername(event.target.value)}
             autoComplete="username"
             required
-            className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-3 font-normal outline-none focus:border-[var(--primary-blue)]"
+            className={inputClass}
           />
         </label>
         <label className="mt-5 block text-sm font-semibold text-[var(--navy-dark)]">
@@ -141,18 +129,34 @@ export const AuthGate = () => {
             type="password"
             value={password}
             onChange={(event) => setPassword(event.target.value)}
-            autoComplete="current-password"
+            autoComplete={signingIn ? "current-password" : "new-password"}
+            minLength={signingIn ? undefined : 8}
             required
-            className="mt-2 w-full rounded-xl border border-[var(--stroke)] px-4 py-3 font-normal outline-none focus:border-[var(--primary-blue)]"
+            className={inputClass}
           />
         </label>
+        {!signingIn && (
+          <p className="mt-2 text-xs text-[var(--gray-text)]">
+            3-32 letters, numbers, dots, dashes, or underscores; password of at least 8 characters.
+          </p>
+        )}
         {error && <p role="alert" className="mt-4 text-sm text-red-700">{error}</p>}
         <button
           type="submit"
           disabled={busy}
           className="mt-8 w-full rounded-full bg-[var(--secondary-purple)] px-4 py-3 text-sm font-semibold text-white disabled:opacity-60"
         >
-          {busy ? "Signing in..." : "Sign in"}
+          {busy ? "Please wait..." : signingIn ? "Sign in" : "Create account"}
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            setMode(signingIn ? "register" : "sign-in");
+            setError("");
+          }}
+          className="mt-4 w-full text-sm font-semibold text-[var(--primary-blue)]"
+        >
+          {signingIn ? "Need an account? Create one" : "Already have an account? Sign in"}
         </button>
       </form>
     </main>

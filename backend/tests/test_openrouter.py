@@ -6,8 +6,8 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.auth import SESSION_COOKIE
 from app.main import create_app
+from tests.helpers import client_for
 from app.openrouter import MODEL, OPENROUTER_URL, OpenRouterClient, OpenRouterError
 
 
@@ -35,8 +35,7 @@ def test_check_sends_model_request_and_returns_answer(
 
     app = create_app(tmp_path, tmp_path / "data")
     app.state.openrouter = OpenRouterClient(httpx.MockTransport(respond))
-    client = TestClient(app)
-    client.cookies.set(SESSION_COOKIE, app.state.sessions.create("user"))
+    client = client_for(app)
     response = client.post("/api/ai/check")
     assert response.status_code == 200
     assert response.json() == {"answer": "4"}
@@ -46,8 +45,7 @@ def test_check_sends_model_request_and_returns_answer(
 def test_missing_key_is_clear(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.delenv("OPENROUTER_API_KEY", raising=False)
     app = create_app(tmp_path, tmp_path / "data")
-    client = TestClient(app)
-    client.cookies.set(SESSION_COOKIE, app.state.sessions.create("user"))
+    client = client_for(app)
     response = client.post("/api/ai/check")
     assert response.status_code == 503
     assert response.json() == {"detail": "OPENROUTER_API_KEY is not configured"}

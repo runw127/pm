@@ -3,19 +3,26 @@
 ## Business Requirements
 
 This project is building a Project Management App. Key features:
-- A user can sign in
-- When signed in, the user sees a Kanban board representing their project
-- The Kanban board has fixed columns that can be renamed
-- The cards on the Kanban board can be moved with drag and drop, and edited
-- There is an AI chat feature in a sidebar; the AI is able to create / edit / move one or more cards
+- People can create an account, sign in, change their password, and delete their account
+- Administrators manage users: list accounts, grant or revoke admin, reset passwords, delete users
+- Each user owns any number of Kanban boards (one per project) and can create, rename, switch, and delete them
+- Owners share boards with other users as editors or viewers; cards can be assigned to board members
+- Members discuss cards in comment threads; every board change is recorded in an activity log
+- Cards have checklists, with progress shown on the card
+- Cards are archived rather than deleted, and can be restored or deleted permanently from the archive
+- My work lists open cards assigned to you across all boards, soonest due first
+- Boards have columns that can be added, renamed, reordered, and deleted
+- Cards have a title, details, priority, due date, and labels; they can be moved with drag and drop, edited, searched, and filtered
+- Each board header summarizes card, done, overdue, and high-priority counts
+- There is an AI chat feature in a drawer opened from the board toolbar, scoped to the open board; the AI can create / edit / move cards and add / rename / reorder columns
 
 ## Limitations
 
-For the MVP, there will only be a user sign in (hardcoded to 'user' and 'password') but the database will support multiple users for future.
+A seeded admin account `user` / `password` is created on first start; change its password after signing in.
 
-For the MVP, there will only be 1 Kanban board per signed in user.
+Boards are private unless their owner shares them.
 
-For the MVP, this will run locally (in a docker container)
+This runs locally (in a docker container).
 
 ## Technical Decisions
 

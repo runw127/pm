@@ -1,13 +1,13 @@
-# Project Management MVP plan
+# Project Management plan
 
-Work through these parts in order. Mark a task done only after its tests and success criteria pass. Part 1 and Part 5 require user approval before the next part starts.
+Parts 1-10 built the MVP; Part 11 onward expands it into a full project management app. Work through these parts in order. Mark a task done only after its tests and success criteria pass. Part 1 and Part 5 require user approval before the next part starts.
 
 ## Shared scope and checks
 
-- One board per signed-in user; the database supports multiple users.
-- Five fixed columns can be renamed, but not added, removed, or reordered.
-- Users can add, edit, delete, move, and reorder cards. AI can perform several card changes in one request.
-- MVP credentials are `user` / `password`. Sign-in persists across refresh and browser restart; logout clears it, and sessions expire after 30 days.
+- People register their own accounts; the seeded admin is `user` / `password`. Sign-in persists across refresh and browser restart; logout clears it, and sessions expire after 30 days.
+- Each user owns any number of private boards. Columns can be added, renamed, reordered, and deleted (1-12 per board).
+- Users can add, edit, delete, move, and reorder cards with priority, due date, and labels. AI can perform several card and column changes in one request.
+- Parts 1-10 describe the MVP as built at the time (one board, five fixed columns); Part 11 replaced those limits.
 - FastAPI serves the exported Next.js site at `/` and owns `/api` routes. The OpenRouter key stays on the server.
 - SQLite data survives container restarts via a mounted data directory. Create the database when missing.
 - Frontend and backend unit test suites each reach at least 80% line coverage of application code. Exclude generated code, configuration, tests, and framework boilerplate. Integration and browser tests are additional.
@@ -121,3 +121,80 @@ Success: The endpoint returns text and an authoritative board snapshot; valid AI
 Tests: Frontend unit tests for sending, replies, failures, and board refresh; browser tests for a reply and multi-card update with a mocked model; final container smoke test and both 80% unit coverage checks.
 
 Success: A signed-in user chats from the sidebar; AI changes appear immediately and persist after refresh; the full app runs in one local container.
+
+## Part 11: Accounts, multiple boards, and richer cards
+
+- [x] Schema version 2 with a migration from version 1: users with scrypt password hashes and an admin flag, SQLite sessions, many boards per user, positioned columns, and card priority, due date, and labels.
+- [x] Registration, password change, and account deletion; admin user list, role toggle, password reset, and delete; the last admin is protected.
+- [x] Board routes under `/api/boards/{boardId}`: create, rename, and delete boards; add, rename, move, and delete columns; partial card edits.
+- [x] Per-board AI chat with column operations and card fields.
+- [x] Frontend: create-account form, workspace navigation, board list, board toolbar with stats and filters, column controls, shared card form, account settings, and admin panel.
+- [x] Browser tests run against the real backend with a fresh database.
+
+Tests: backend unit and integration tests (migration, isolation, rollback, limits, admin rules), frontend unit tests for every component and API module, Playwright specs for auth, boards, kanban, admin, and AI chat against the built site and against the container, and the opt-in live OpenRouter tests.
+
+Success: 59 backend tests at 99.8% coverage; 55 frontend unit tests at 97% line coverage; 18 Playwright tests pass against both the local stack and the Docker image; live structured-output calls succeed.
+
+## Part 12: Board sharing and assignees
+
+- [x] Schema version 3 (migrations from versions 1 and 2): a `board_members` table with editor and viewer roles, and `cards.assignee_id`.
+- [x] The owner shares by username, changes roles, and removes members; members can leave. Only owners rename, delete, or share a board. Viewers are read-only (403).
+- [x] Assignees must be board members and are cleared when a member leaves, is removed, or deletes their account. The AI can assign cards, and refuses changes for viewers.
+- [x] Frontend: owned and shared board lists, a members panel, an assignee field, chip, and filter, and a read-only board for viewers.
+
+Tests: backend sharing tests (roles, validation, cleanup, v2 migration, AI viewer and assignee), frontend unit tests for the members panel, read-only mode, assignee filter, and shared list, and a three-user Playwright sharing flow.
+
+Success: 68 backend tests at 99.7% coverage; 63 frontend unit tests at 97% coverage; 19 Playwright tests pass.
+
+## Part 13: Comments and activity
+
+- [x] Schema version 4 (migrations from versions 1-3): `card_comments` and an `activity` log.
+- [x] Every board change, sharing change, and comment is logged with the actor, a readable summary, and the source (user or AI). The log is available per board and per card.
+- [x] Any member can comment, viewers included. Authors delete their own comments and owners delete any. Cards show their comment count.
+- [x] Frontend: a card detail dialog (fields, comment thread, history; closes on Escape or backdrop) and a board activity panel that refreshes after each change.
+
+Tests: backend activity and comment tests (summaries, ordering, limit, permissions, history surviving card and account deletion, AI attribution, v3 migration), frontend unit tests for the dialog, activity panel, and API module, and a two-user Playwright collaboration flow.
+
+Success: 75 backend tests at 99.8% coverage; 76 frontend unit tests at 97.7% coverage; 20 Playwright tests pass.
+
+## Part 14: Card checklists
+
+- [x] Schema version 5 (migrations from versions 1-4): a `checklist_items` table; items are deleted with their card.
+- [x] Checklist routes to add, check, rename, and remove items (owners and editors; at most 30 items of 200 characters), each logged to the activity log.
+- [x] The AI can add, edit, and delete checklist items.
+- [x] Frontend: a checklist section with progress in the card dialog (read-only for viewers), a done/total chip on the card face, board save errors shown in the dialog, and card history that reloads after each change.
+
+Tests: backend checklist tests (order, toggling, rename, limits, roles, cascade, AI operations and rollback, v4 migration), frontend unit tests for the checklist, card dialog, board integration, and API module, and a Playwright checklist flow that survives refresh.
+
+Success: 81 backend tests at 99.8% coverage; 85 frontend unit tests at 97.9% coverage; 21 Playwright tests pass locally and against the Docker image; live OpenRouter tests pass.
+
+## Layout update (after Part 14)
+
+- [x] Board picker and new-board form moved into the header line; the left board column is gone.
+- [x] AI chat moved into a drawer opened from the board toolbar; columns flex to fit the width.
+
+Tests: Workspace and chat unit tests rewritten for the picker and drawer; Playwright specs switch boards through the picker and open the chat. No sideways scroll for a five-column board at 1280, 1440, or 1920 pixels wide.
+
+## Part 15: My work
+
+- [x] `GET /api/my-work`: open cards assigned to the signed-in user across owned and shared boards, soonest due first; cards in a board's last column count as done.
+- [x] Frontend: a My work view in the header, grouped into Overdue, Due today, Upcoming, and No due date, with board, column, priority, labels, and checklist progress. Choosing an item switches to its board and opens the card.
+- [x] Fixed the keyboard drag browser test's intermittent failure: traces showed ArrowUp pressed about 7ms after the drag activated, before dnd-kit measured drop targets, so the card stayed over its own slot. The test now presses until the move is announced.
+
+Tests: backend ordering, done-column, removal, and auth tests; frontend unit tests for the view, grouping, API, workspace navigation, and opening a card on load; a two-user Playwright flow from assignment to opening the card. The kanban specs passed 150 repeated runs under parallel load.
+
+Success: 84 backend tests at 99.8% coverage; 92 frontend unit tests at 98% coverage; 22 Playwright tests pass.
+
+## Part 16: Card archive
+
+- [x] Schema version 6 (migrations from versions 1-5): `cards.archived_at`.
+- [x] Archive and restore operations (owners and editors, logged; restore appends to the card's column), an archive listing for any member, and permanent delete for archived cards. Archived cards leave the board, card counts, and My work; the AI can archive cards and is told to prefer it over deleting.
+- [x] Frontend: the card's Archive action replaces Remove, and an Archived panel in the toolbar restores cards or deletes them permanently after confirmation (read-only for viewers).
+
+Tests: backend archive tests (ordering, restore position, blocked edits, roles, My work, column deletion, AI, v5 migration), frontend unit tests for the archive panel, board integration, and API module, and a Playwright archive, restore, and delete flow.
+
+Success: 90 backend tests at 99.8% coverage; 97 frontend unit tests at 98% coverage; 22 Playwright tests pass.
+
+## Next parts (proposed)
+
+- Part 17: Board templates when creating a board.

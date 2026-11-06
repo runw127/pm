@@ -1,21 +1,74 @@
 {
+  "id": "board-3f2a9c0d",
+  "name": "Product launch",
+  "role": "owner",
+  "members": [
+    {"id": "user-1a", "username": "user", "role": "owner"},
+    {"id": "user-2b", "username": "bob", "role": "editor"}
+  ],
   "columns": [
-    { "id": "col-backlog", "title": "Backlog", "cardIds": ["card-101"] },
-    { "id": "col-discovery", "title": "Discovery", "cardIds": [] },
-    { "id": "col-progress", "title": "In Progress", "cardIds": ["card-102"] },
-    { "id": "col-review", "title": "Review", "cardIds": [] },
-    { "id": "col-done", "title": "Done", "cardIds": [] }
+    {
+      "id": "col-backlog",
+      "title": "Backlog",
+      "cardIds": [
+        "card-101"
+      ]
+    },
+    {
+      "id": "col-discovery",
+      "title": "Discovery",
+      "cardIds": []
+    },
+    {
+      "id": "col-progress",
+      "title": "In Progress",
+      "cardIds": [
+        "card-102"
+      ]
+    },
+    {
+      "id": "col-review",
+      "title": "Review",
+      "cardIds": []
+    },
+    {
+      "id": "col-done",
+      "title": "Done",
+      "cardIds": []
+    },
+    {
+      "id": "col-8b1e44f0",
+      "title": "Blocked",
+      "cardIds": []
+    }
   ],
   "cards": {
     "card-101": {
       "id": "card-101",
       "title": "Gather customer signals",
-      "details": "Review support tags and sales notes."
+      "details": "Review support tags and sales notes.",
+      "priority": "high",
+      "dueDate": "2026-12-01",
+      "labels": [
+        "research"
+      ],
+      "assigneeId": "user-2b",
+      "commentCount": 2,
+      "checklist": [
+        {"id": "item-1a", "text": "Write release notes", "done": true},
+        {"id": "item-2b", "text": "Tag the build", "done": false}
+      ]
     },
     "card-102": {
       "id": "card-102",
       "title": "Design card layout",
-      "details": "Add spacing for dense lists."
+      "details": "Add spacing for dense lists.",
+      "priority": "medium",
+      "dueDate": null,
+      "labels": [],
+      "assigneeId": null,
+      "commentCount": 0,
+      "checklist": []
     }
   }
 }

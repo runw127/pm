@@ -1,42 +1,31 @@
 # Frontend
 
-This directory contains the Kanban Studio frontend. It is a Next.js App Router application using React and TypeScript. The root page renders `KanbanBoard`, which is a client component.
+Kanban Studio frontend: Next.js App Router, React, TypeScript, Tailwind, exported statically (`output: "export"`) and served by FastAPI.
 
-## Current behavior
+## Behavior
 
-- `src/lib/kanban.ts` defines board types and card movement helpers. Its sample board is used by tests.
-- `AuthGate` checks the backend session, displays the sign-in form, and provides logout. The board is shown only after sign-in. A 401 from any board or chat request returns to the sign-in form with a session-expired message.
-- `KanbanBoard` loads the signed-in user's board from the backend and saves each change through the board API. Confirmed server responses update the displayed board; errors leave the previous board visible.
-- Users can rename columns, add, edit, and delete cards, and drag cards within or between columns using `@dnd-kit` with the pointer or keyboard (focus a Drag handle, Space to pick up, arrow keys to move, Space to drop). Inputs enforce the backend length limits.
-- The board shows loading, saving, and error states.
-- A responsive AI chat sidebar sends authenticated requests, applies returned board snapshots, and keeps recent messages in tab session storage. New conversation clears history; logout clears it too.
-- Column count is fixed; titles are editable.
-- Styling uses `src/app/globals.css` and Tailwind CSS classes in components.
+- `AuthGate` checks `/api/session`, then shows the sign-in or create-account form or the `Workspace`. A 401 from any request returns to sign-in with a session-expired message. Logout and expiry clear every board conversation.
+- `Workspace` has a one-line header: the board picker (a select with "Your boards" and "Shared with you" groups, showing owner, role, and card count), Delete for the open owned board when you own more than one, the new-board form, then Boards, Account, Users for admins, and Log out. The board takes the full width below it; columns flex between 200px and 360px wide so five fit without sideways scrolling from about 1280px; the selected board is remembered in `localStorage` (`pm-active-board`).
+- `KanbanBoard` loads one board by ID. Every change goes to the API, and the UI replaces its state with the returned snapshot; errors keep the previous board. Saving and error states are shown. Columns can be added, renamed, moved left or right, and deleted (with confirmation). Cards can be dragged with the pointer or keyboard (focus Drag, Space, arrows, Space).
+- `MembersPanel` (opened with the toolbar's Members button) lets the owner share by username, change roles, and remove members; others can leave. Viewers get a read-only board: no add, edit, drag, or column controls.
+- `BoardToolbar` has the board name (editable by the owner only), a role badge, summary stats (cards, done = last column, overdue, high priority), and search, priority, label, and assignee filters.
+- `CardForm` is shared by add and edit: title, details, priority, due date, assignee (a board member), and comma-separated labels. `CardMeta` shows priority, due status, the assignee, and labels.
+- Clicking a card title opens `CardDetail`, a dialog with the card's fields, comment thread (add, and delete your own or as owner), and history. It closes with Close, the backdrop, or Escape. The toolbar's Activity button shows `ActivityPanel`, which refetches whenever the board snapshot changes. Cards show their comment count and checklist progress. The dialog's `Checklist` section toggles, adds, and removes items through the board's `save` (read-only for viewers); the dialog shows board save errors and reloads card history whenever the card changes.
+- `MyWork` (header button) lists open cards assigned to you from `lib/work-api.ts`, grouped by due status (`groupWork`). Choosing one selects its board and passes `initialCardId` to `KanbanBoard`, which opens that card's dialog; the board is keyed with a counter so the same card can be reopened.
+- Cards have an Archive action (no confirmation, since it can be undone). The toolbar's Archived button shows `ArchivePanel`, which lists archived cards, restores them, or deletes them permanently after a confirmation, and refetches when the board changes.
+- `AIChatSidebar` is a fixed right-hand drawer toggled by the toolbar's AI chat button (it stays mounted while hidden, so a pending reply is kept). It chats about the open board and keeps history in `sessionStorage` under `kanban-studio-chat:<boardId>`.
+- `AccountSettings` handles password change and account deletion. `AdminPanel` handles the user table, admin toggle, password reset, and delete.
 
 ## File map
 
-- `src/app/page.tsx`: root page.
-- `src/app/layout.tsx`: fonts, metadata, and global styles.
-- `src/components/KanbanBoard.tsx`: board loading, state, and interaction handlers.
-- `src/components/AuthGate.tsx`: session check, sign-in, and logout.
-- `src/components/KanbanColumn.tsx`: column rendering and add form.
-- `src/components/KanbanCard.tsx`: sortable card, editing form, and delete button.
-- `src/components/NewCardForm.tsx`: add-card form.
-- `src/components/KanbanCardPreview.tsx`: drag overlay.
-- `src/components/AIChatSidebar.tsx`: AI conversation, send state, and session history.
-- `src/lib/kanban.ts`: types, sample test data, and card movement.
-- `src/lib/board-api.ts`: board API requests and error handling.
-- `src/lib/ai-api.ts`: AI chat request and response types.
-- `src/lib/kanban.test.ts`, `src/lib/board-api.test.ts`, and `src/components/KanbanBoard.test.tsx`: Vitest unit tests.
-- `tests/kanban.spec.ts`: Playwright browser tests.
-- `tests/ai-chat.spec.ts`: AI chat browser tests with a mocked model response.
+- `src/lib/api.ts`: `request`, `ApiError`, `isExpired`, `messageOf`.
+- `src/lib/board-api.ts`, `src/lib/account-api.ts`, `src/lib/ai-api.ts`, `src/lib/activity-api.ts`: typed API calls (activity also has `describe` and `formatTime`).
+- `src/lib/kanban.ts`: types, sample data for tests, filters, due-date and stats helpers, `moveCard`.
+- `src/components/*.tsx`: the components above, each with a `*.test.tsx` beside it.
+- `tests/*.spec.ts`: Playwright specs (auth, boards, kanban, sharing, collaboration, checklist, my-work, admin, ai-chat) with shared `tests/helpers.ts`. Each test registers a fresh user.
 
 ## Commands
 
-- `npm run dev`: run the frontend locally.
-- `npm run build`: build the Next.js app.
-- `npm run lint`: run ESLint.
-- `npm run test:unit`: run Vitest tests.
-- `npm run test:e2e`: run Playwright browser tests.
-
-The project plan is in `../docs/PLAN.md`.
+- `npm run dev`, `npm run build`, `npm run lint`
+- `npm run test:unit`: Vitest with coverage (80% floor; currently about 97% of lines).
+- `npm run test:e2e`: Playwright. By default it builds the site and serves it from the real FastAPI backend on port 8123 with a fresh database in `.e2e-data/`, and no OpenRouter key. Set `PLAYWRIGHT_BASE_URL` to test a running container instead. First run: `npx playwright install chromium`.

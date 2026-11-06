@@ -1,43 +1,45 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ApiError, addCard, deleteCard, editCard, getBoard, moveCardOnServer, renameColumn } from "@/lib/board-api";
+import * as api from "@/lib/board-api";
 import { initialData } from "@/lib/kanban";
 
 afterEach(() => vi.unstubAllGlobals());
 
+const fields = { title: "First", details: "Notes", priority: "high" as const, dueDate: "2026-12-01", labels: ["qa"], assigneeId: null };
+
 describe("board API", () => {
-  it("sends board requests with the expected paths and payloads", async () => {
-    const fetchMock = vi.fn().mockResolvedValue({ ok: true, json: async () => initialData });
+  it("sends each board request with the expected path, method, and payload", async () => {
+    const fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, json: async () => initialData });
     vi.stubGlobal("fetch", fetchMock);
 
-    expect(await getBoard()).toBe(initialData);
-    await renameColumn("col-backlog", "Ideas");
-    await addCard("col-backlog", "First", "Notes");
-    await editCard("card-1", "Updated", "More notes");
-    await moveCardOnServer("card-1", "col-done", 0);
-    await deleteCard("card-1");
-
-    expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/board", expect.objectContaining({ method: "GET" }));
-    expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/board/columns/col-backlog", expect.objectContaining({
-      method: "PATCH", body: JSON.stringify({ title: "Ideas" }),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(3, "/api/board/cards", expect.objectContaining({
-      method: "POST", body: JSON.stringify({ columnId: "col-backlog", title: "First", details: "Notes" }),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(4, "/api/board/cards/card-1", expect.objectContaining({
-      method: "PATCH", body: JSON.stringify({ title: "Updated", details: "More notes" }),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(5, "/api/board/cards/card-1/move", expect.objectContaining({
-      method: "POST", body: JSON.stringify({ toColumnId: "col-done", toIndex: 0 }),
-    }));
-    expect(fetchMock).toHaveBeenNthCalledWith(6, "/api/board/cards/card-1", expect.objectContaining({ method: "DELETE" }));
-  });
-
-  it("reports API and network failures", async () => {
-    const fetchMock = vi.fn().mockResolvedValueOnce({
-      ok: false, status: 422, json: async () => ({ detail: "Title cannot be empty" }),
-    }).mockRejectedValueOnce(new Error("Offline"));
-    vi.stubGlobal("fetch", fetchMock);
-    await expect(renameColumn("col-backlog", "")).rejects.toEqual(new ApiError("Title cannot be empty", 422));
-    await expect(getBoard()).rejects.toThrow("Offline");
+    const calls: [() => Promise<unknown>, string, string, object?][] = [
+      [() => api.listBoards(), "/api/boards", "GET"],
+      [() => api.createBoard("Launch"), "/api/boards", "POST", { name: "Launch" }],
+      [() => api.getBoard("b 1"), "/api/boards/b%201", "GET"],
+      [() => api.renameBoard("b1", "New"), "/api/boards/b1", "PATCH", { name: "New" }],
+      [() => api.deleteBoard("b1"), "/api/boards/b1", "DELETE"],
+      [() => api.addColumn("b1", "Blocked"), "/api/boards/b1/columns", "POST", { title: "Blocked" }],
+      [() => api.renameColumn("b1", "c1", "Ideas"), "/api/boards/b1/columns/c1", "PATCH", { title: "Ideas" }],
+      [() => api.deleteColumn("b1", "c1"), "/api/boards/b1/columns/c1", "DELETE"],
+      [() => api.moveColumn("b1", "c1", 2), "/api/boards/b1/columns/c1/move", "POST", { toIndex: 2 }],
+      [() => api.addCard("b1", "c1", fields), "/api/boards/b1/cards", "POST", { columnId: "c1", ...fields }],
+      [() => api.editCard("b1", "k1", { priority: "low" }), "/api/boards/b1/cards/k1", "PATCH", { priority: "low" }],
+      [() => api.deleteCard("b1", "k1"), "/api/boards/b1/cards/k1", "DELETE"],
+      [() => api.archiveCard("b1", "k1"), "/api/boards/b1/cards/k1/archive", "POST"],
+      [() => api.restoreCard("b1", "k1"), "/api/boards/b1/cards/k1/restore", "POST"],
+      [() => api.listArchived("b1"), "/api/boards/b1/archive", "GET"],
+      [() => api.shareBoard("b1", "bob", "viewer"), "/api/boards/b1/members", "POST", { username: "bob", role: "viewer" }],
+      [() => api.removeMember("b1", "u2"), "/api/boards/b1/members/u2", "DELETE"],
+      [() => api.leaveBoard("b1"), "/api/boards/b1/leave", "POST"],
+      [() => api.moveCardOnServer("b1", "k1", "c2", 0), "/api/boards/b1/cards/k1/move", "POST", { toColumnId: "c2", toIndex: 0 }],
+      [() => api.addChecklistItem("b1", "k1", "Step"), "/api/boards/b1/cards/k1/checklist", "POST", { text: "Step" }],
+      [() => api.editChecklistItem("b1", "k1", "i 1", { done: true }), "/api/boards/b1/cards/k1/checklist/i%201", "PATCH", { done: true }],
+      [() => api.deleteChecklistItem("b1", "k1", "i1"), "/api/boards/b1/cards/k1/checklist/i1", "DELETE"],
+    ];
+    for (const [call, path, method, body] of calls) {
+      await call();
+      expect(fetchMock).toHaveBeenLastCalledWith(path, expect.objectContaining({
+        method, body: body ? JSON.stringify(body) : undefined,
+      }));
+    }
   });
 });
